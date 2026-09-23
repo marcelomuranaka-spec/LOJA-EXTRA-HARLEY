@@ -18,6 +18,7 @@ import datetime
 import reflex as rx
 
 from .. import xano_client as xano
+from ..vendas_servico import CAMPO_VENDA, esta_cancelada
 
 
 def _moeda(valor) -> str:
@@ -76,10 +77,12 @@ class ImpressaoState(rx.State):
     observacoes: str = ""
     termo: str = ""
     assinaturas: list[str] = []
+    # faixa de destaque (ex.: "VENDA CANCELADA em ... — motivo: ...")
+    faixa: str = ""
 
     def _limpar(self):
         self.erro = ""
-        self.titulo = self.numero = self.total = self.observacoes = self.termo = ""
+        self.titulo = self.numero = self.total = self.observacoes = self.termo = self.faixa = ""
         self.grupo1_titulo = self.grupo2_titulo = self.grupo3_titulo = self.itens_titulo = ""
         self.grupo1, self.grupo2, self.grupo3 = [], [], []
         self.itens_cabecalho, self.itens, self.assinaturas = [], [], []
@@ -118,6 +121,11 @@ class ImpressaoState(rx.State):
             _buscar_ou_none("clientes", venda.get("id_cliente")),
             _buscar_ou_none("motos_clientes", venda.get("id_moto_cliente")),
         )
+        try:
+            itens_venda = [i for i in await xano.listar("itens_transacao")
+                           if int(i.get(CAMPO_VENDA) or 0) == doc_id]
+        except Exception:
+            itens_venda = []
         tipo = venda.get("tipo_transacao") or "—"
         self.titulo = "COMPROVANTE DE VENDA"
         self.numero = f"Nº {doc_id:06d}"
@@ -136,11 +144,27 @@ class ImpressaoState(rx.State):
                 ["Placa", _texto(moto.get("placa"))],
                 ["Chassi", _texto(moto.get("chassi"))],
             ]
-        self.itens_titulo = "Descrição"
-        self.itens_cabecalho = ["Descrição", "Valor"]
-        self.itens = [[f"Venda — {tipo.replace('_', ' ').lower()}", _moeda(venda.get("valor_total"))]]
+        self.itens_titulo = "Itens"
+        if itens_venda:
+            self.itens_cabecalho = ["Produto / serviço", "Qtd.", "Unitário", "Subtotal"]
+            self.itens = [
+                [_texto(i.get("descricao")), str(i.get("quantidade") or 0), _moeda(i.get("valor_unitario")),
+                 _moeda((i.get("quantidade") or 0) * float(i.get("valor_unitario") or 0))]
+                for i in itens_venda
+            ]
+        else:
+            self.itens_cabecalho = ["Descrição", "Valor"]
+            self.itens = [["Itens não registrados (venda anterior ao registro de itens)",
+                           _moeda(venda.get("valor_total"))]]
         self.total = _moeda(venda.get("valor_total"))
         self.assinaturas = ["Vendedor", "Cliente"]
+        if esta_cancelada(venda):
+            quando = venda.get("data_cancelamento")
+            quando = (_data_hora(quando) if isinstance(quando, (int, float))
+                      else "/".join(reversed(str(quando or "")[:10].split("-"))))
+            motivo = venda.get("motivo_cancelamento") or "não informado"
+            self.faixa = f"VENDA CANCELADA em {quando or '—'} — motivo: {motivo}"
+            self.total_rotulo = "TOTAL (CANCELADO)"
 
     async def _montar_os(self, doc_id: int):
         ordem = await xano.buscar("ordens_servico", doc_id)

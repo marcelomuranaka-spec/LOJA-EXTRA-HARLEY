@@ -148,6 +148,16 @@ def _folha() -> rx.Component:
     return rx.box(
         rx.vstack(
             _cabecalho(),
+            rx.cond(
+                ImpressaoState.faixa != "",
+                rx.box(
+                    rx.text(ImpressaoState.faixa, size="3", weight="bold", color="#b00020", text_align="center"),
+                    border="3px solid #b00020",
+                    border_radius="6px",
+                    padding="0.6rem",
+                    width="100%",
+                ),
+            ),
             rx.grid(
                 _grupo(ImpressaoState.grupo1_titulo, ImpressaoState.grupo1),
                 _grupo(ImpressaoState.grupo2_titulo, ImpressaoState.grupo2),

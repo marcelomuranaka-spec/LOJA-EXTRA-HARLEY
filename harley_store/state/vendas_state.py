@@ -1,34 +1,30 @@
 """
-State de Vendas / Balcão (tabela Transacoes).
+State de Vendas / Balcão (tabelas transacoes + itens_transacao).
 
-Atenção — limitação herdada do banco original: a tabela `Transacoes` só
-guarda o valor total da venda, sem uma tabela de itens (diferente de
-Compras e Ordens de Serviço, que têm `Itens_Compra_Estoque` e
-`Itens_Ordem_Servico`). Por isso, aqui embaixo o campo "produto vendido"
-é só um AJUDANTE de cálculo: ele soma o valor e baixa o estoque na hora,
-mas não fica gravado de forma permanente qual produto foi vendido em
-qual transação — só o valor total.
+Uma venda tem vários itens (carrinho): produtos do estoque ou itens avulsos
+(sem estoque, ex.: mão de obra). Vendas não são apagadas: são CANCELADAS,
+continuam na lista, saem do faturamento e devolvem o estoque. As regras
+(ordem das gravações, travas de estoque, compensação de falhas) ficam em
+`vendas_servico.py`; aqui fica só o que a tela precisa.
 
-Se no futuro você quiser guardar o detalhe de cada item vendido no
-balcão (recomendado!), crie uma tabela `ItensTransacao` igual à
-`ItemOrdemServico`, com id_transacao + id_produto + quantidade +
-valor_unitario, e repita o padrão usado em `compras_state.py`.
+Vendas registradas antes dos itens existirem não têm itens gravados: são
+exibidas com o valor total e, se canceladas, o sistema avisa para conferir o
+estoque manualmente.
 
-Dados vêm do backend Xano. Observação: o schema da tabela `transacoes`
-no Xano foi criado por importação de CSV, então `id_cliente` e
-`id_moto_cliente` são inteiros não-opcionais — "sem cliente/moto" é
-representado como `0`, não `null`.
+Observação: por causa da importação por CSV, "sem cliente/moto" em
+`transacoes` é `0`, não `null`.
 """
 
 import asyncio
-from typing import Optional
 
 import reflex as rx
 
-from ..models import TIPOS_TRANSACAO
+from .. import vendas_servico as servico
 from .. import xano_client as xano
+from ..models import TIPOS_TRANSACAO
 
 TABELA = "transacoes"
+TABELA_ITENS = "itens_transacao"
 TABELA_FUNCIONARIOS = "funcionarios"
 TABELA_CLIENTES = "clientes"
 TABELA_MOTOS = "motos_clientes"
@@ -36,55 +32,114 @@ TABELA_PRODUTOS = "produtos"
 
 SEM_CLIENTE = "— nenhum —"
 SEM_MOTO = "— nenhuma —"
-SEM_PRODUTO = "— nenhum (informar valor manualmente) —"
+
+
+def _numero(texto: str) -> float:
+    texto = (texto or "").strip().replace("R$", "").replace(" ", "")
+    if "," in texto:
+        texto = texto.replace(".", "").replace(",", ".")
+    return float(texto) if texto else 0.0
+
+
+def _moeda(valor: float) -> str:
+    return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _data_cancelamento(valor) -> str:
+    """O campo pode ser timestamp (epoch ms) ou date ('AAAA-MM-DD') no Xano."""
+    if not valor:
+        return ""
+    if isinstance(valor, (int, float)):
+        return xano.epoch_ms_para_datetime(valor).strftime("%d/%m/%Y %H:%M")
+    partes = str(valor)[:10].split("-")
+    return "/".join(reversed(partes)) if len(partes) == 3 else str(valor)
 
 
 class VendasState(rx.State):
     transacoes: list[dict] = []
+    aviso_itens: str = ""  # tabela de itens indisponível no Xano
 
     funcionarios_opcoes: list[str] = []
     clientes_opcoes: list[str] = []
     motos_opcoes: list[str] = []
     produtos_opcoes: list[str] = []
 
+    # cabeçalho da venda
     tipo_transacao: str = TIPOS_TRANSACAO[0]
     funcionario_selecionado: str = ""
     cliente_selecionado: str = SEM_CLIENTE
     moto_selecionada: str = SEM_MOTO
-    produto_selecionado: str = SEM_PRODUTO
-    quantidade: str = "1"
-    valor_total: str = "0.00"
 
-    # Preço de cada produto, guardado no carregar(): recalcular o valor ao
-    # digitar a quantidade não precisa ir ao Xano a cada tecla.
+    # carrinho: [{id_produto, descricao, quantidade, valor_unitario, subtotal}] (strings para a tela)
+    carrinho: list[dict] = []
+    produto_selecionado: str = ""
+    item_quantidade: str = "1"
+    item_preco: str = ""
+    avulso_descricao: str = ""
+    avulso_quantidade: str = "1"
+    avulso_valor: str = ""
+
+    erro_venda: str = ""
+    sucesso_venda: str = ""
+
+    # cancelamento
+    selecionadas: list[str] = []
+    motivo_cancelamento: str = ""
+    resultado_cancelamento: list[str] = []
+
     _precos: dict[int, float] = {}
+    _estoques: dict[int, int] = {}
+    _nomes: dict[int, str] = {}
+
+    @rx.var
+    def total_carrinho(self) -> str:
+        total = sum(int(i["quantidade"]) * _numero(i["valor_unitario"]) for i in self.carrinho)
+        return _moeda(total)
+
+    @rx.var
+    def qtd_selecionadas(self) -> int:
+        return len(self.selecionadas)
+
+    # ------------------------------------------------------------ carregar
 
     @rx.event
     async def carregar(self):
-        # As 5 tabelas são buscadas em paralelo.
         funcionarios, clientes, motos, produtos, transacoes = await asyncio.gather(
             xano.listar(TABELA_FUNCIONARIOS), xano.listar(TABELA_CLIENTES), xano.listar(TABELA_MOTOS),
             xano.listar(TABELA_PRODUTOS), xano.listar(TABELA),
         )
+        try:
+            itens = await xano.listar(TABELA_ITENS)
+            self.aviso_itens = ""
+        except Exception:
+            itens = []
+            self.aviso_itens = ("A tabela itens_transacao não está disponível no Xano: "
+                                "não é possível registrar nem cancelar vendas com devolução de estoque.")
         funcionarios.sort(key=lambda f: f["nome_funcionario"])
         clientes.sort(key=lambda c: c["nome_cliente"])
         motos.sort(key=lambda m: m["modelo"])
         produtos.sort(key=lambda p: p["nome_produto"])
-        self._precos = {p["id"]: p["preco_venda"] for p in produtos}
+        self._precos = {p["id"]: float(p["preco_venda"] or 0) for p in produtos}
+        self._estoques = {p["id"]: int(p["estoque_qtd"] or 0) for p in produtos}
+        self._nomes = {p["id"]: p["nome_produto"] for p in produtos}
 
         self.funcionarios_opcoes = [f"{f['id']} - {f['nome_funcionario']}" for f in funcionarios]
         self.clientes_opcoes = [SEM_CLIENTE] + [f"{c['id']} - {c['nome_cliente']}" for c in clientes]
         self.motos_opcoes = [SEM_MOTO] + [f"{m['id']} - {m['modelo']} ({m['placa']})" for m in motos]
-        self.produtos_opcoes = [SEM_PRODUTO] + [
-            f"{p['id']} - {p['nome_produto']} — estoque {p['estoque_qtd']} — R$ {p['preco_venda']:.2f}"
-            for p in produtos
+        self.produtos_opcoes = [
+            f"{p['id']} - {p['nome_produto']} — estoque {p['estoque_qtd']}" for p in produtos
         ]
+        if not self.funcionario_selecionado and self.funcionarios_opcoes:
+            self.funcionario_selecionado = self.funcionarios_opcoes[0]
 
         nomes_funcionario = {f["id"]: f["nome_funcionario"] for f in funcionarios}
         nomes_cliente = {c["id"]: c["nome_cliente"] for c in clientes}
+        itens_por_venda: dict[int, int] = {}
+        for item in itens:
+            vid = int(item.get(servico.CAMPO_VENDA) or 0)
+            itens_por_venda[vid] = itens_por_venda.get(vid, 0) + 1
 
-        registros = sorted(transacoes, key=lambda t: t["data_transacao"], reverse=True)[:50]
-
+        registros = sorted(transacoes, key=lambda t: t["data_transacao"] or 0, reverse=True)[:50]
         self.transacoes = [
             {
                 "id": str(t["id"]),
@@ -92,106 +147,169 @@ class VendasState(rx.State):
                 "funcionario_nome": nomes_funcionario.get(t["id_funcionario"], "—"),
                 "cliente_nome": nomes_cliente.get(t["id_cliente"], "—") if t.get("id_cliente") else "—",
                 "data_transacao": xano.epoch_ms_para_datetime(t["data_transacao"]).strftime("%d/%m/%Y %H:%M"),
-                "valor_total": f"{t['valor_total']:.2f}",
+                "valor_total": _moeda(float(t["valor_total"] or 0)),
+                "cancelada": servico.esta_cancelada(t),
+                "data_cancelamento": _data_cancelamento(t.get("data_cancelamento")),
+                "motivo": t.get("motivo_cancelamento") or "",
+                "qtd_itens": str(itens_por_venda[t["id"]]) if t["id"] in itens_por_venda else "—",
             }
             for t in registros
         ]
+        ativas = {t["id"] for t in self.transacoes if not t["cancelada"]}
+        self.selecionadas = [i for i in self.selecionadas if i in ativas]
 
-        if not self.funcionario_selecionado and self.funcionarios_opcoes:
-            self.funcionario_selecionado = self.funcionarios_opcoes[0]
-
-    @rx.event
-    def definir_tipo(self, valor: str):
-        self.tipo_transacao = valor
+    # ------------------------------------------------------------ carrinho
 
     @rx.event
-    async def definir_produto(self, valor: str):
+    def definir_produto(self, valor: str):
         self.produto_selecionado = valor
-        await self._recalcular_valor()
+        try:
+            pid = int(valor.split(" - ")[0])
+            self.item_preco = _moeda(self._precos.get(pid, 0.0))
+        except ValueError:
+            pass
 
     @rx.event
-    async def definir_quantidade(self, valor: str):
-        self.quantidade = valor
-        await self._recalcular_valor()
-
-    async def _recalcular_valor(self):
-        if self.produto_selecionado == SEM_PRODUTO or not self.produto_selecionado:
+    def adicionar_produto(self):
+        self.erro_venda = self.sucesso_venda = ""
+        if not self.produto_selecionado:
+            self.erro_venda = "Escolha um produto."
             return
         try:
-            produto_id = int(self.produto_selecionado.split(" - ")[0])
-            qtd = int(self.quantidade or 0)
+            pid = int(self.produto_selecionado.split(" - ")[0])
+            qtd = int(self.item_quantidade or 0)
+            preco = _numero(self.item_preco)
         except ValueError:
+            self.erro_venda = "Quantidade e preço precisam ser números."
             return
-        preco = self._precos.get(produto_id)
-        if preco is not None:
-            self.valor_total = f"{preco * qtd:.2f}"
+        if qtd <= 0 or preco < 0:
+            self.erro_venda = "A quantidade precisa ser maior que zero e o preço não pode ser negativo."
+            return
+        ja_no_carrinho = sum(int(i["quantidade"]) for i in self.carrinho if int(i["id_produto"]) == pid)
+        disponivel = self._estoques.get(pid, 0)
+        if ja_no_carrinho + qtd > disponivel:
+            self.erro_venda = f"Estoque insuficiente de {self._nomes.get(pid, 'produto')}: há {disponivel}."
+            return
+        self.carrinho = self.carrinho + [{
+            "id_produto": str(pid),
+            "descricao": self._nomes.get(pid, f"Produto {pid}"),
+            "quantidade": str(qtd),
+            "valor_unitario": _moeda(preco),
+            "subtotal": _moeda(qtd * preco),
+        }]
+        self.item_quantidade = "1"
+
+    @rx.event
+    def adicionar_avulso(self):
+        self.erro_venda = self.sucesso_venda = ""
+        descricao = self.avulso_descricao.strip()
+        try:
+            qtd = int(self.avulso_quantidade or 0)
+            valor = _numero(self.avulso_valor)
+        except ValueError:
+            self.erro_venda = "Quantidade e valor precisam ser números."
+            return
+        if not descricao or qtd <= 0 or valor < 0:
+            self.erro_venda = "Informe a descrição, uma quantidade maior que zero e um valor válido."
+            return
+        self.carrinho = self.carrinho + [{
+            "id_produto": "0",
+            "descricao": descricao,
+            "quantidade": str(qtd),
+            "valor_unitario": _moeda(valor),
+            "subtotal": _moeda(qtd * valor),
+        }]
+        self.avulso_descricao, self.avulso_quantidade, self.avulso_valor = "", "1", ""
+
+    @rx.event
+    def remover_item(self, indice: int):
+        self.carrinho = [item for i, item in enumerate(self.carrinho) if i != indice]
 
     @rx.event
     def nova_venda(self):
         self.tipo_transacao = TIPOS_TRANSACAO[0]
         self.cliente_selecionado = SEM_CLIENTE
         self.moto_selecionada = SEM_MOTO
-        self.produto_selecionado = SEM_PRODUTO
-        self.quantidade = "1"
-        self.valor_total = "0.00"
+        self.carrinho = []
+        self.produto_selecionado = ""
+        self.item_quantidade, self.item_preco = "1", ""
+        self.avulso_descricao, self.avulso_quantidade, self.avulso_valor = "", "1", ""
+        self.erro_venda = ""
 
     @rx.event
     async def salvar(self):
+        self.erro_venda = self.sucesso_venda = ""
         if not self.funcionario_selecionado:
-            return rx.window_alert("Cadastre um funcionário antes de registrar uma venda.")
-        try:
-            valor = float(str(self.valor_total).replace(",", "."))
-        except ValueError:
-            return rx.window_alert("Valor total inválido.")
-        if valor < 0:
-            return rx.window_alert("O valor total não pode ser negativo.")
-
-        id_funcionario = int(self.funcionario_selecionado.split(" - ")[0])
+            self.erro_venda = "Cadastre um funcionário antes de registrar uma venda."
+            return
+        if not self.carrinho:
+            self.erro_venda = "Adicione ao menos um item à venda."
+            return
+        itens = [
+            {"id_produto": int(i["id_produto"]), "descricao": i["descricao"],
+             "quantidade": int(i["quantidade"]), "valor_unitario": _numero(i["valor_unitario"])}
+            for i in self.carrinho
+        ]
         id_cliente = 0 if self.cliente_selecionado == SEM_CLIENTE else int(self.cliente_selecionado.split(" - ")[0])
         id_moto = 0 if self.moto_selecionada == SEM_MOTO else int(self.moto_selecionada.split(" - ")[0])
-
-        produto_id: Optional[int] = None
-        quantidade = 0
-        if self.produto_selecionado != SEM_PRODUTO and self.produto_selecionado:
-            produto_id = int(self.produto_selecionado.split(" - ")[0])
-            try:
-                quantidade = int(self.quantidade or 0)
-            except ValueError:
-                return rx.window_alert("Quantidade inválida.")
-            if quantidade <= 0:
-                return rx.window_alert("Quantidade precisa ser maior que zero.")
-
-        if produto_id is not None:
-            produto = await xano.buscar(TABELA_PRODUTOS, produto_id)
-            if produto is None:
-                return rx.window_alert("Produto não encontrado.")
-            if produto["estoque_qtd"] < quantidade:
-                return rx.window_alert(
-                    f"Estoque insuficiente: só há {produto['estoque_qtd']} unidade(s) de {produto['nome_produto']}."
-                )
-            produto["estoque_qtd"] -= quantidade
-            await xano.atualizar(TABELA_PRODUTOS, produto_id, {k: v for k, v in produto.items() if k != "id"})
-
-        await xano.criar(
-            TABELA,
-            {
-                "tipo_transacao": self.tipo_transacao,
-                "id_funcionario": id_funcionario,
-                "id_cliente": id_cliente,
-                "id_moto_cliente": id_moto,
-                "data_transacao": xano.datetime_para_epoch_ms(),
-                "valor_total": valor,
-            },
-        )
-
+        try:
+            venda_id = await servico.registrar_venda(
+                self.tipo_transacao, int(self.funcionario_selecionado.split(" - ")[0]),
+                id_cliente, id_moto, itens,
+            )
+        except servico.FalhaVenda as erro:
+            self.erro_venda = str(erro)
+            await self.carregar()
+            return
+        total = self.total_carrinho
         self.nova_venda()
+        self.sucesso_venda = f"Venda nº {venda_id} registrada: R$ {total}."
+        await self.carregar()
+
+    # -------------------------------------------------------- cancelamento
+
+    @rx.event
+    def preparar_cancelamento(self):
+        self.motivo_cancelamento = ""
+
+    @rx.event
+    def alternar_selecao(self, venda_id: str):
+        if venda_id in self.selecionadas:
+            self.selecionadas = [i for i in self.selecionadas if i != venda_id]
+        else:
+            self.selecionadas = self.selecionadas + [venda_id]
+
+    @rx.event
+    def limpar_selecao(self):
+        self.selecionadas = []
+
+    def _resumir(self, resultados: list[dict]):
+        canceladas = [r for r in resultados if r["situacao"] == "cancelada"]
+        linhas = []
+        if canceladas:
+            linhas.append(f"{len(canceladas)} vendas canceladas." if len(canceladas) > 1
+                          else f"Venda nº {canceladas[0]['id']} cancelada.")
+        linhas += [r["mensagem"] for r in resultados if r["mensagem"]]
+        self.resultado_cancelamento = linhas
+
+    @rx.event
+    async def cancelar(self, venda_id: str):
+        resultado = await servico.cancelar_venda(int(venda_id), self.motivo_cancelamento)
+        resultado["id"] = int(venda_id)
+        self._resumir([resultado])
+        self.selecionadas = [i for i in self.selecionadas if i != venda_id]
         await self.carregar()
 
     @rx.event
-    async def excluir(self, transacao_id: str):
-        # Observação: excluir uma venda aqui NÃO devolve o produto ao estoque
-        # automaticamente (o vínculo com o produto não é guardado, ver nota
-        # no topo do arquivo). Ajuste o estoque manualmente na página Produtos
-        # se for o caso.
-        await xano.excluir(TABELA, int(transacao_id))
+    async def cancelar_selecionadas(self):
+        ids = [int(i) for i in self.selecionadas]
+        if not ids:
+            return
+        resultados = await servico.cancelar_varias(ids, self.motivo_cancelamento)
+        self._resumir(resultados)
+        self.selecionadas = []
         await self.carregar()
+
+    @rx.event
+    def fechar_resultado(self):
+        self.resultado_cancelamento = []

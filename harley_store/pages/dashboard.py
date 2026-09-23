@@ -90,7 +90,10 @@ def _linha_atividade(row: dict) -> rx.Component:
             rx.badge(
                 row["origem"],
                 variant="soft",
-                color_scheme=rx.cond(row["origem"] == "Venda", "orange", "gray"),
+                color_scheme=rx.cond(
+                    row["origem"] == "Venda", "orange",
+                    rx.cond(row["origem"] == "Compra", "gray", "red"),  # "Venda (cancelada)"
+                ),
             )
         ),
         rx.table.cell(row["tipo"]),

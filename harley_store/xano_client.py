@@ -61,10 +61,24 @@ def _obter_cliente() -> httpx.AsyncClient:
     return _cliente
 
 
+# Métodos que podem ser repetidos sem efeito colateral: o PATCH do Xano grava
+# o registro completo (mesmo resultado se repetido). POST NÃO entra: repetir
+# um POST que chegou ao Xano mas cuja resposta se perdeu criaria um registro
+# em dobro (por exemplo, uma venda duplicada).
+_REPETIVEIS = {"GET", "PATCH", "PUT", "DELETE"}
+
+
 async def _request(metodo: str, url: str, **kwargs) -> httpx.Response:
     client = _obter_cliente()
     for tentativa in range(_MAX_TENTATIVAS):
-        resposta = await client.request(metodo, url, **kwargs)
+        try:
+            resposta = await client.request(metodo, url, **kwargs)
+        except httpx.TransportError:
+            # rede instável / Xano demorando: tenta de novo só o que é seguro repetir
+            if metodo.upper() not in _REPETIVEIS or tentativa == _MAX_TENTATIVAS - 1:
+                raise
+            await asyncio.sleep(_ESPERA_BASE_SEGUNDOS * (tentativa + 1))
+            continue
         if resposta.status_code != 429:
             return resposta
         espera = float(resposta.headers.get("Retry-After", 0)) or _ESPERA_BASE_SEGUNDOS * (2**tentativa)
@@ -120,7 +134,8 @@ async def _renovar(tabela: str) -> None:
 # Tabelas usadas pelas telas. Mantidas sempre em cache por manter_cache_aquecido.
 TABELAS_AQUECIDAS = [
     "clientes", "produtos", "motos", "motos_clientes", "funcionarios", "fornecedores",
-    "transacoes", "ordens_servico", "itens_ordem_servico", "entrada_mercadoria", "itens_compra_estoque",
+    "transacoes", "itens_transacao", "ordens_servico", "itens_ordem_servico",
+    "entrada_mercadoria", "itens_compra_estoque",
 ]
 
 

@@ -25,9 +25,13 @@ Transações (Vendas), Ordens de Serviço e Itens de Ordem de Serviço.
   compra e venda, datas de entrada/saída, cliente, observações e foto.
 - **Produtos** — catálogo e estoque, com aviso de estoque baixo (≤ 5 unidades).
 - **Clientes** e **Motos dos clientes** — cadastro e vínculo cliente → moto.
-- **Vendas / Balcão** — registra uma venda (moto, peças ou balcão), com um
-  atalho opcional para escolher um produto e a quantidade: o app calcula o
-  valor e já baixa o estoque sozinho.
+- **Vendas / Balcão** — venda com **vários itens** (carrinho): produtos do
+  estoque (preço já preenchido e editável, para descontos) e itens avulsos
+  sem estoque (ex.: mão de obra). O estoque é baixado na hora, protegido
+  contra vendas simultâneas do mesmo produto. Vendas **não são apagadas**:
+  são **canceladas** (uma ou várias de uma vez, com motivo opcional),
+  continuam no histórico como "Cancelada", saem do faturamento e devolvem
+  os produtos ao estoque.
 - **Ordens de serviço** — abre OS vinculada a uma moto e um mecânico, permite
   lançar peças usadas (que também baixam o estoque) e trocar o status
   (Aberta → Em andamento → Concluída/Cancelada).
@@ -229,19 +233,12 @@ Python. Se preferir usar o SQL Server do script original:
 3. Rode `reflex db migrate` de novo para o Reflex criar/ajustar as tabelas
    nesse banco.
 
-### Limitação herdada do banco original (e como resolver)
+### Vendas antigas (antes do registro de itens)
 
-A tabela `Transacoes` (Vendas) só guarda o **valor total** da venda — ela
-não tem uma tabela de itens como `Compras` e `Ordens de Serviço` têm. O
-app contorna isso deixando você escolher um produto e quantidade só para
-**calcular** o valor e **baixar o estoque na hora**, mas não fica
-registrado depois qual produto foi vendido em qual venda.
-
-Se quiser guardar esse detalhe (recomendado, se as vendas de balcão forem
-o principal uso do app), crie uma tabela `ItensTransacao` em `models.py`
-igual a `ItemOrdemServico` — com `id_transacao`, `id_produto`,
-`quantidade` e `valor_unitario` — e repita o padrão de
-`compras_state.py`, que já resolve exatamente esse tipo de tela.
+Vendas registradas antes de existirem os itens (tabela `itens_transacao`)
+guardam só o valor total. Elas continuam aparecendo e podem ser canceladas,
+mas nesse caso nada volta ao estoque automaticamente, porque não se sabe o
+que foi vendido; o sistema avisa para conferir o estoque manualmente.
 
 ## Esqueci minha senha
 
@@ -301,6 +298,4 @@ projeto. Copie esse arquivo para outro lugar (um pen drive, um serviço de
 nuvem) periodicamente — ele **não** sobe para o Git (está no
 `.gitignore`) de propósito, exatamente para não misturar dados reais da
 loja com o código-fonte.
-#   L O J A - E X T R A - H A R L E Y 
- 
- 
+# LOJA-EXTRA-HARLEY

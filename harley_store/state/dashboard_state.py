@@ -16,6 +16,7 @@ import datetime
 import reflex as rx
 
 from .. import xano_client as xano
+from ..vendas_servico import esta_cancelada
 
 LIMITE_ESTOQUE_BAIXO = 5
 MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
@@ -87,14 +88,16 @@ class DashboardState(rx.State):
         transacoes_com_data = [
             (t, xano.epoch_ms_para_datetime(t["data_transacao"])) for t in transacoes
         ]
-        self.faturamento_hoje = _moeda(sum(t["valor_total"] for t, d in transacoes_com_data if d >= inicio_hoje))
-        self.faturamento_mes = _moeda(sum(t["valor_total"] for t, d in transacoes_com_data if d >= inicio_mes))
+        # Vendas canceladas continuam no histórico, mas não entram no faturamento.
+        validas = [(t, d) for t, d in transacoes_com_data if not esta_cancelada(t)]
+        self.faturamento_hoje = _moeda(sum(t["valor_total"] or 0 for t, d in validas if d >= inicio_hoje))
+        self.faturamento_mes = _moeda(sum(t["valor_total"] or 0 for t, d in validas if d >= inicio_mes))
 
         por_mes = {}
         for i in range(11, -1, -1):
             ano, mes = divmod(hoje.year * 12 + hoje.month - 1 - i, 12)
             por_mes[(ano, mes + 1)] = 0.0
-        for t, d in transacoes_com_data:
+        for t, d in validas:
             if (d.year, d.month) in por_mes:
                 por_mes[(d.year, d.month)] += t["valor_total"] or 0
         self.faturamento_12_meses = [
@@ -107,7 +110,7 @@ class DashboardState(rx.State):
 
         atividades = [
             {
-                "origem": "Venda",
+                "origem": "Venda (cancelada)" if esta_cancelada(t) else "Venda",
                 "tipo": t["tipo_transacao"],
                 "quem": clientes.get(t.get("id_cliente"), funcionarios.get(t["id_funcionario"], "—")),
                 "data": d,
