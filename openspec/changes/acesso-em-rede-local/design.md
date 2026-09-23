@@ -50,7 +50,7 @@ Regra de entrada liberando **somente TCP 3000 e 8000, perfil Privado**. Como nã
 ### D4. Git local, produção como clone, versões marcadas com tag
 `git init` em `C:\TESTE_LOJA_HARLEY`; `C:\HARLEY_PROD` é um `git clone` dessa pasta. Cada publicação cria uma tag `prod-AAAAMMDD-HHMM` no repositório de desenvolvimento, e a produção faz checkout da tag. Voltar à versão anterior é fazer checkout da tag anterior e reiniciar.
 - *Alternativa:* cópia com `robocopy`. Rejeitada na exploração: não registra versão nem permite rollback.
-- *Alternativa:* remoto no GitHub. Adiado (opcional); não é necessário para o requisito e pode ser adicionado depois sem mudar o roteiro.
+- **Remoto no GitHub (adotado depois, a pedido do usuário):** o repositório privado `marcelomuranaka-spec/LOJA-EXTRA-HARLEY` é o `origin` do desenvolvimento e serve como cópia do código fora do notebook. O roteiro de publicação continua local: a produção clona e atualiza a partir de `C:\TESTE_LOJA_HARLEY`, sem depender da internet para publicar. O repositório MUST continuar privado enquanto a API do Xano não exigir token, porque as URLs dela estão no código.
 
 A produção tem seu próprio `.venv` (criado a partir de `requirements.txt`) e sua própria `uploaded_files/`. O `.gitignore` passa a excluir também `.states/`, e `harley_store.db` já está excluído por `*.db`.
 

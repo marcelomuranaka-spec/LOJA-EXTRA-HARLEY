@@ -4,7 +4,7 @@ Legenda: **[você]** = feito pelo usuário, ou com autorização explícita dele
 
 ## 1. Pré-requisitos do ambiente
 
-- [ ] 1.1 [você] Instalar o Git for Windows e configurar `user.name` e `user.email`; verificar com `git --version` e `git config --global --list`
+- [x] 1.1 [você] Instalar o Git for Windows e configurar `user.name` e `user.email`; verificar com `git --version` e `git config --list` (Git 2.55.0 e GitHub CLI 2.101.0 instalados; autor configurado no repositório como `marcelomuranaka-spec`)
 - [ ] 1.2 [você] Mudar a rede "Sidlar" para o perfil Privado; verificar que `Get-NetConnectionProfile` mostra `NetworkCategory: Private`
 - [ ] 1.3 [você] Configurar "nunca suspender" na tomada, mantendo 10 min na bateria; verificar com `powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE` (índice AC `0x00000000`)
 - [ ] 1.4 [você] Configurar "fechar a tampa: não fazer nada" na tomada; verificar com `powercfg /query SCHEME_CURRENT SUB_BUTTONS LIDACTION` (índice AC `0x00000000`)
@@ -13,8 +13,9 @@ Legenda: **[você]** = feito pelo usuário, ou com autorização explícita dele
 
 ## 2. Versionamento
 
-- [ ] 2.1 Revisar o `.gitignore` (acrescentar `.states/`, `logs/` e `producao.local.ps1`); verificar que `git status`, após o init, não lista `.venv`, `.web`, `*.db`, `uploaded_files` nem `.states`
-- [ ] 2.2 Executar `git init` em `C:\TESTE_LOJA_HARLEY` e fazer o commit inicial do estado atual; verificar com `git log --oneline` (1 commit) e `git status` limpo
+- [x] 2.1 Revisar o `.gitignore` (acrescentar `.states/`, `logs/` e `producao.local.ps1`); verificar que `git status`, após o init, não lista `.venv`, `.web`, `*.db`, `uploaded_files` nem `.states`
+- [x] 2.2 Executar `git init` em `C:\TESTE_LOJA_HARLEY` e fazer o commit inicial do estado atual; verificar com `git log --oneline` (1 commit) e `git status` limpo
+- [x] 2.3 Enviar o repositório ao GitHub privado `marcelomuranaka-spec/LOJA-EXTRA-HARLEY` (remoto `origin`); verificar que o commit local e o remoto são iguais (`git ls-remote origin`) e que o repositório responde 404 sem login (privado)
 
 ## 3. Scripts de operação
 
