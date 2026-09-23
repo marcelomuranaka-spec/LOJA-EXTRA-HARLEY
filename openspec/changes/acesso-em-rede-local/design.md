@@ -56,7 +56,9 @@ A produção tem seu próprio `.venv` (criado a partir de `requirements.txt`) e 
 
 ### D5. Scripts de operação (versionados em `scripts/`)
 - `iniciar_producao.ps1`: carrega `producao.local.ps1`, define as variáveis e roda `reflex run --env prod` na pasta de produção, com a saída gravada em `logs/producao-AAAAMMDD.log`.
-- `parar_producao.ps1`: encerra os processos cuja linha de comando pertence a `C:\HARLEY_PROD`, incluindo processos-filhos. Isso resolve o problema já observado nesta sessão: um processo órfão continuava segurando a porta 8000 com código antigo.
+- `parar_producao.ps1`: pede a parada criando `logs\PARAR` na pasta de produção, espera as portas liberarem e, por fim, encerra o que ainda for visível nesta sessão (a árvore de processos de `C:\HARLEY_PROD`).
+  - **Ajuste feito no Apply:** a tarefa agendada com logon S4U roda na sessão 0 do Windows, e os processos criados lá não podem ser vistos nem encerrados pelo usuário comum ("Acesso negado", linha de comando vazia). Por isso `iniciar_producao.ps1` virou um **supervisor**: inicia o Reflex, vigia o arquivo `logs\PARAR` e, ao encontrá-lo, encerra a própria árvore de processos, com a qual compartilha a sessão. Encerrar a tarefa pelo Agendador NÃO é usado para parar, porque mata o supervisor antes dos filhos e deixa um órfão segurando a porta (foi o que aconteceu na primeira tentativa).
+  - *Alternativas rejeitadas:* rodar `publicar` sempre como administrador (UAC a cada publicação); tarefa só com o usuário conectado (viola o retorno automático após reinício).
 - `atualizar_producao.ps1 [-Tag <tag>]`: parar → `git fetch` → `git checkout <tag>` (ou a tag mais recente) → `pip install -r requirements.txt` → iniciar via Agendador. Recusa-se a rodar se a pasta de produção tiver alterações locais.
 - `publicar.ps1`: no desenvolvimento, recusa-se a rodar se houver alterações não commitadas, cria a tag `prod-...` e chama `atualizar_producao.ps1`.
 - `iniciar_dev.ps1`: portas 3001/8001, backend em `127.0.0.1`, `--env dev`.

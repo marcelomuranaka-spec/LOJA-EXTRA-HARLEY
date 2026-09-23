@@ -1,8 +1,15 @@
 ﻿<#
-  Inicia o ambiente de PRODUÇÃO do Harley Store (o que os funcionários usam).
+  Inicia e SUPERVISIONA o ambiente de PRODUÇÃO do Harley Store (o que os
+  funcionários usam).
 
   Executado automaticamente pela tarefa agendada "HarleyStore-Producao"
   quando o notebook liga. Fica em execução enquanto o sistema estiver no ar.
+
+  Por que é um supervisor: a tarefa agendada roda numa sessão separada do
+  Windows (sessão 0), e os processos criados lá não podem ser encerrados
+  pelo usuário comum ("Acesso negado"). Por isso quem encerra a produção é
+  este próprio script: o parar_producao.ps1 só cria o arquivo de pedido
+  logs\PARAR, e este script, ao vê-lo, encerra toda a sua árvore de processos.
 
   Lê o endereço de rede do arquivo producao.local.ps1, que fica na raiz da
   pasta de produção e NÃO vai para o git. Conteúdo esperado:
@@ -41,12 +48,54 @@ Remove-Item Env:\REFLEX_BACKEND_HOST -ErrorAction SilentlyContinue  # padrao 0.0
 $pastaLogs = Join-Path $raiz 'logs'
 New-Item -ItemType Directory -Force $pastaLogs | Out-Null
 $log = Join-Path $pastaLogs ("producao-{0:yyyyMMdd}.log" -f (Get-Date))
-Add-Content -Path $log -Encoding utf8 -Value ("`r`n==== {0:yyyy-MM-dd HH:mm:ss} iniciando producao em http://{1}:3000" -f (Get-Date), $EnderecoProducao)
+$pedidoParada = Join-Path $pastaLogs 'PARAR'
+Remove-Item $pedidoParada -ErrorAction SilentlyContinue   # pedido antigo não vale
+function Registrar($texto) { Add-Content -Path $log -Encoding utf8 -Value ("==== {0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $texto) }
 
-# cmd /c faz o redirecionamento sem o PowerShell 5.1 transformar a saida de
-# erro do Reflex em excecao. Bloqueia ate o Reflex terminar.
+function Encerrar-Arvore([int]$raizPid) {
+    $todos = @(Get-CimInstance Win32_Process)
+    $alvo = @{ $raizPid = $true }
+    do {
+        $novos = 0
+        foreach ($p in $todos) {
+            if (-not $alvo.ContainsKey([int]$p.ProcessId) -and $alvo.ContainsKey([int]$p.ParentProcessId)) {
+                $alvo[[int]$p.ProcessId] = $true; $novos++
+            }
+        }
+    } while ($novos -gt 0)
+    foreach ($id in $alvo.Keys) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
+    # workers que perderam o pai e ainda seguram as portas da produção
+    Start-Sleep -Seconds 2
+    foreach ($c in @(Get-NetTCPConnection -LocalPort 3000, 8000 -State Listen -ErrorAction SilentlyContinue)) {
+        $proc = Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
+        if ($proc -and $proc.ProcessName -match '^(python|pythonw|node|bun)$') {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Registrar "iniciando producao em http://${EnderecoProducao}:3000"
+
+# cmd /c faz o redirecionamento sem o PowerShell 5.1 transformar a saída de
+# erro do Reflex em exceção.
 $reflex = Join-Path $raiz '.venv\Scripts\reflex.exe'
-cmd /c "`"$reflex`" run --env prod --loglevel info >> `"$log`" 2>&1"
-$codigo = $LASTEXITCODE
-Add-Content -Path $log -Encoding utf8 -Value ("==== {0:yyyy-MM-dd HH:mm:ss} producao encerrada (codigo {1})" -f (Get-Date), $codigo)
-exit $codigo
+$processo = Start-Process cmd.exe -PassThru -WindowStyle Hidden -WorkingDirectory $raiz -ArgumentList @(
+    '/c', "`"`"$reflex`" run --env prod --loglevel info >> `"$log`" 2>&1`"")
+
+# Supervisão: encerra tudo quando houver pedido de parada; se o Reflex cair
+# sozinho, sai com erro (a tarefa agendada tenta de novo).
+while ($true) {
+    if (Test-Path $pedidoParada) {
+        Registrar 'pedido de parada recebido; encerrando'
+        Encerrar-Arvore $processo.Id
+        Remove-Item $pedidoParada -ErrorAction SilentlyContinue
+        Registrar 'producao encerrada a pedido'
+        exit 0
+    }
+    if ($processo.HasExited) {
+        Registrar "Reflex terminou sozinho (codigo $($processo.ExitCode))"
+        Encerrar-Arvore $processo.Id
+        exit 1
+    }
+    Start-Sleep -Seconds 3
+}
