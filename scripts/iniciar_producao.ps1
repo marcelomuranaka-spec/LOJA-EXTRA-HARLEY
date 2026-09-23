@@ -28,6 +28,10 @@ if (-not $EnderecoProducao) {
     exit 1
 }
 
+# Em produção o Reflex inicia o backend chamando o executável "granian" pelo
+# nome; na tarefa agendada o .venv não está no PATH, então é incluído aqui.
+$env:PATH = (Join-Path $raiz '.venv\Scripts') + ';' + $env:PATH
+
 $env:REFLEX_API_URL       = "http://${EnderecoProducao}:8000"
 $env:REFLEX_DEPLOY_URL    = "http://${EnderecoProducao}:3000"
 $env:REFLEX_FRONTEND_PORT = '3000'
