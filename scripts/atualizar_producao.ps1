@@ -15,7 +15,10 @@ param(
     [string]$Producao = 'C:\HARLEY_PROD',
     [int]$EsperaMaxMinutos = 10
 )
-$ErrorActionPreference = 'Stop'
+# 'Continue' (e nao 'Stop'): no PowerShell 5.1, com 'Stop', qualquer aviso que o
+# git escreva na saida de erro vira excecao, mesmo com 2>$null. Cada passo
+# confere $LASTEXITCODE explicitamente.
+$ErrorActionPreference = 'Continue'
 $nomeTarefa = 'HarleyStore-Producao'
 
 function Falhar($mensagem) { Write-Host "ERRO: $mensagem" -ForegroundColor Red; exit 1 }

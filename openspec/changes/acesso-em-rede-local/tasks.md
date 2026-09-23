@@ -5,10 +5,10 @@ Legenda: **[você]** = feito pelo usuário, ou com autorização explícita dele
 ## 1. Pré-requisitos do ambiente
 
 - [x] 1.1 [você] Instalar o Git for Windows e configurar `user.name` e `user.email`; verificar com `git --version` e `git config --list` (Git 2.55.0 e GitHub CLI 2.101.0 instalados; autor configurado no repositório como `marcelomuranaka-spec`)
-- [ ] 1.2 [você] Mudar a rede "Sidlar" para o perfil Privado; verificar que `Get-NetConnectionProfile` mostra `NetworkCategory: Private`
-- [ ] 1.3 [você] Configurar "nunca suspender" na tomada, mantendo 10 min na bateria; verificar com `powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE` (índice AC `0x00000000`)
-- [ ] 1.4 [você] Configurar "fechar a tampa: não fazer nada" na tomada; verificar com `powercfg /query SCHEME_CURRENT SUB_BUTTONS LIDACTION` (índice AC `0x00000000`)
-- [ ] 1.5 [você] Definir o horário ativo do Windows Update das 7h às 19h; verificar em Configurações > Windows Update > Opções avançadas
+- [x] 1.2 [você] Mudar a rede "Sidlar" para o perfil Privado; verificar que `Get-NetConnectionProfile` mostra `NetworkCategory: Private`
+- [x] 1.3 [você] Configurar "nunca suspender" na tomada, mantendo 10 min na bateria; verificar com `powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE` (índice AC `0x00000000`)
+- [x] 1.4 [você] Configurar "fechar a tampa: não fazer nada" na tomada; verificar com `powercfg /query SCHEME_CURRENT SUB_BUTTONS LIDACTION` (índice AC `0x00000000`)
+- [x] 1.5 [você] Definir o horário ativo do Windows Update das 7h às 19h; verificar em Configurações > Windows Update > Opções avançadas
 - [ ] 1.6 [você] Criar no roteador a reserva de IP para o adaptador `ec:0e:c4:f6:76:0d` e confirmar que "endereços de hardware aleatórios" está desligado para a rede "Sidlar"; verificar que o IP permanece o mesmo após desconectar e reconectar o Wi-Fi, e anotar o IP reservado
 
 ## 2. Versionamento
@@ -31,7 +31,7 @@ Legenda: **[você]** = feito pelo usuário, ou com autorização explícita dele
 - [x] 4.1 Clonar o repositório para `C:\HARLEY_PROD`, criar o `.venv` com Python 3.12 e instalar `requirements.txt`; verificar com `.venv\Scripts\reflex.exe --version` (0.7.14)
 - [x] 4.2 Criar `C:\HARLEY_PROD\producao.local.ps1` com o IP reservado da tarefa 1.6; verificar que `git status` na produção não o lista
 - [ ] 4.3 Executar `scripts/publicar.ps1` para a primeira versão; verificar que a produção está na tag criada (`git describe --tags`) e que `http://<IP reservado>:3000` abre no próprio notebook
-- [ ] 4.4 [você] Criar a regra de firewall de entrada para TCP 3000 e 8000, somente no perfil Privado; verificar com `Get-NetFirewallRule` e `Get-NetFirewallPortFilter`
+- [x] 4.4 [você] Criar a regra de firewall de entrada para TCP 3000 e 8000, somente no perfil Privado; verificar com `Get-NetFirewallRule` e `Get-NetFirewallPortFilter`
 - [ ] 4.5 [você] Criar a tarefa `HarleyStore-Producao` no Agendador (gatilho na inicialização, sem exigir logon, S4U, reiniciar se falhar 3x a cada 1 min, sem limite de tempo); verificar com `Start-ScheduledTask` que a produção sobe, e com `Get-ScheduledTaskInfo` que o último resultado é bem-sucedido. Se o S4U falhar, trocar para "armazenar senha" (design D6)
 
 ## 5. Verificação integrada

@@ -11,7 +11,10 @@
   Voltar versão:  .\scripts\atualizar_producao.ps1 -Tag <tag anterior>
 #>
 param([string]$Producao = 'C:\HARLEY_PROD')
-$ErrorActionPreference = 'Stop'
+# 'Continue' (e nao 'Stop'): no PowerShell 5.1, com 'Stop', qualquer aviso que o
+# git escreva na saida de erro vira excecao, mesmo com 2>$null. Cada passo
+# confere $LASTEXITCODE explicitamente.
+$ErrorActionPreference = 'Continue'
 $raiz = Split-Path $PSScriptRoot -Parent
 
 $pendentes = git -C $raiz status --porcelain
