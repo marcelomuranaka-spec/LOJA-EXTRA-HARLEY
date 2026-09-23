@@ -30,9 +30,9 @@ Legenda: **[você]** = feito pelo usuário, ou com autorização explícita dele
 
 - [x] 4.1 Clonar o repositório para `C:\HARLEY_PROD`, criar o `.venv` com Python 3.12 e instalar `requirements.txt`; verificar com `.venv\Scripts\reflex.exe --version` (0.7.14)
 - [x] 4.2 Criar `C:\HARLEY_PROD\producao.local.ps1` com o IP reservado da tarefa 1.6; verificar que `git status` na produção não o lista
-- [ ] 4.3 Executar `scripts/publicar.ps1` para a primeira versão; verificar que a produção está na tag criada (`git describe --tags`) e que `http://<IP reservado>:3000` abre no próprio notebook
+- [x] 4.3 Executar `scripts/publicar.ps1` para a primeira versão; verificar que a produção está na tag criada (`git describe --tags`) e que `http://<IP reservado>:3000` abre no próprio notebook
 - [x] 4.4 [você] Criar a regra de firewall de entrada para TCP 3000 e 8000, somente no perfil Privado; verificar com `Get-NetFirewallRule` e `Get-NetFirewallPortFilter`
-- [ ] 4.5 [você] Criar a tarefa `HarleyStore-Producao` no Agendador (gatilho na inicialização, sem exigir logon, S4U, reiniciar se falhar 3x a cada 1 min, sem limite de tempo); verificar com `Start-ScheduledTask` que a produção sobe, e com `Get-ScheduledTaskInfo` que o último resultado é bem-sucedido. Se o S4U falhar, trocar para "armazenar senha" (design D6)
+- [x] 4.5 [você] Criar a tarefa `HarleyStore-Producao` no Agendador (gatilho na inicialização, sem exigir logon, S4U, reiniciar se falhar 3x a cada 1 min, sem limite de tempo); verificar com `Start-ScheduledTask` que a produção sobe, e com `Get-ScheduledTaskInfo` que o último resultado é bem-sucedido. Se o S4U falhar, trocar para "armazenar senha" (design D6)
 
 ## 5. Verificação integrada
 

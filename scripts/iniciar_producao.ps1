@@ -50,7 +50,13 @@ New-Item -ItemType Directory -Force $pastaLogs | Out-Null
 $log = Join-Path $pastaLogs ("producao-{0:yyyyMMdd}.log" -f (Get-Date))
 $pedidoParada = Join-Path $pastaLogs 'PARAR'
 Remove-Item $pedidoParada -ErrorAction SilentlyContinue   # pedido antigo não vale
-function Registrar($texto) { Add-Content -Path $log -Encoding utf8 -Value ("==== {0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $texto) }
+# O supervisor escreve num log PRÓPRIO: o arquivo do Reflex fica aberto para
+# escrita pelo cmd, e gravar nele daqui falharia com "arquivo em uso".
+# Uma falha de log nunca pode interromper a supervisão.
+$logSupervisor = Join-Path $pastaLogs ("supervisor-{0:yyyyMMdd}.log" -f (Get-Date))
+function Registrar($texto) {
+    try { Add-Content -Path $logSupervisor -Encoding utf8 -Value ("{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $texto) } catch {}
+}
 
 function Encerrar-Arvore([int]$raizPid) {
     $todos = @(Get-CimInstance Win32_Process)
@@ -81,6 +87,9 @@ Registrar "iniciando producao em http://${EnderecoProducao}:3000"
 $reflex = Join-Path $raiz '.venv\Scripts\reflex.exe'
 $processo = Start-Process cmd.exe -PassThru -WindowStyle Hidden -WorkingDirectory $raiz -ArgumentList @(
     '/c', "`"`"$reflex`" run --env prod --loglevel info >> `"$log`" 2>&1`"")
+
+# Daqui em diante nenhum erro pode derrubar o supervisor sem encerrar os filhos.
+$ErrorActionPreference = 'Continue'
 
 # Supervisão: encerra tudo quando houver pedido de parada; se o Reflex cair
 # sozinho, sai com erro (a tarefa agendada tenta de novo).
