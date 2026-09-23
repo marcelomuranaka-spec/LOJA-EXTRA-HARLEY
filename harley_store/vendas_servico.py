@@ -50,9 +50,17 @@ async def _ler_direto(caminho: str):
     return resposta.json()
 
 
-async def _itens_da_venda(venda_id: int) -> list[dict]:
-    itens = await _ler_direto(TABELA_ITENS) or []
-    return [i for i in itens if int(i.get(CAMPO_VENDA) or 0) == venda_id]
+async def _itens_da_venda(venda_id: int, venda_nova: bool = False) -> list[dict]:
+    """Pelo cache: os itens de uma venda nunca mudam depois de criados, e toda
+    criação feita pelo app já entra no cache (xano_client._aplicar_no_cache).
+    Se uma venda NOVA (com status) não tiver itens no cache, ela pode ter sido
+    registrada por outro processo (ex.: desenvolvimento): confere direto no
+    Xano antes de concluir que não há o que devolver ao estoque."""
+    itens = [i for i in await xano.listar(TABELA_ITENS) if int(i.get(CAMPO_VENDA) or 0) == venda_id]
+    if not itens and venda_nova:
+        todos = await _ler_direto(TABELA_ITENS) or []
+        itens = [i for i in todos if int(i.get(CAMPO_VENDA) or 0) == venda_id]
+    return itens
 
 
 async def _marcar_cancelada(venda: dict, motivo: str) -> None:
@@ -165,7 +173,7 @@ async def cancelar_venda(venda_id: int, motivo: str = "") -> dict:
             return {"situacao": "erro", "mensagem": f"Venda nº {venda_id}: falha de conexão, nada foi alterado."}
 
         try:
-            itens = await _itens_da_venda(venda_id)
+            itens = await _itens_da_venda(venda_id, venda_nova=bool((venda.get("status") or "").strip()))
         except Exception:
             return {"situacao": "cancelada", "mensagem":
                     f"Venda nº {venda_id} cancelada, mas os itens não puderam ser lidos: confira o estoque manualmente."}

@@ -78,6 +78,8 @@ As vendas selecionadas são canceladas **uma a uma, em sequência** (D4 para cad
 ### D8. Cache
 `itens_transacao` entra em `TABELAS_AQUECIDAS`. As leituras dentro de `estoque.movimentar` e da trava de cancelamento vão direto ao Xano, e todas as gravações limpam o cache da tabela, como já acontece hoje.
 
+**Ajuste feito no Apply (desempenho):** medido na produção, uma venda levou 22,9 s porque cada gravação descartava o cache e a tela relia produtos, vendas e itens. Isso somava requisições, e o Xano Free respondeu 429 ("espere 20 s"). As gravações passaram a **atualizar o cache com o registro devolvido pelo Xano** (`xano_client._aplicar_no_cache`), sem reler a tabela; em caso de erro, o cache da tabela é descartado. Os itens de uma venda são lidos do cache, porque nunca mudam depois de criados. Se uma venda nova não tiver itens no cache, pode ter sido criada por outro processo, e o serviço confere direto no Xano. As releituras diretas de segurança (produto dentro da trava de estoque e venda dentro da trava de cancelamento) foram mantidas. Resultado: registrar faz 4 requisições (antes, ~7 com recarga da tela) em ~1,5 s.
+
 ## Risks / Trade-offs
 
 - **[Mais de um processo de backend]** → As travas em memória só valem dentro de um processo. Hoje a produção tem 1 worker, por não ter Redis. Se um dia houver Redis ou mais workers, a proteção precisa migrar para o Xano. Mitigação: comentário no módulo `estoque.py` e verificação na tarefa 7.x.

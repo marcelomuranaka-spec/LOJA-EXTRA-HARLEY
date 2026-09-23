@@ -90,8 +90,8 @@ async def _request(metodo: str, url: str, **kwargs) -> httpx.Response:
 # (a cada letra digitada numa busca, a cada troca de página, várias telas
 # pedindo "clientes"): com o cache essas leituras são instantâneas e o limite
 # de requisições do Xano Free deixa de ser atingido. Qualquer gravação feita
-# pelo app (criar/atualizar/excluir) apaga o cache da tabela na hora, então
-# quem acabou de salvar sempre vê o dado novo. Alterações feitas por fora do
+# pelo app (criar/atualizar/excluir) é aplicada no cache na hora (ver
+# _aplicar_no_cache), então quem acabou de salvar sempre vê o dado novo. Alterações feitas por fora do
 # app (painel do Xano) aparecem em no máximo _CACHE_SEGUNDOS (5 min).
 _CACHE_SEGUNDOS = 300.0
 _cache: dict[str, tuple[float, list[dict]]] = {}
@@ -169,29 +169,57 @@ async def buscar(tabela: str, registro_id: int) -> dict | None:
     return next((r for r in await listar(tabela) if r.get("id") == registro_id), None)
 
 
+# Cache atualizado pela própria gravação ("write-through"). O Xano devolve o
+# registro completo após criar/alterar; aplicá-lo no cache mantém a listagem
+# correta SEM reler a tabela inteira. Antes, cada gravação descartava o cache
+# e a tela relia produtos/vendas/itens, o que somava requisições e fazia o
+# Xano Free responder 429 ("espere 20 s") durante vendas e cancelamentos.
+# Se algo der errado (resposta inesperada, tabela fora do cache), descarta
+# o cache da tabela, e a próxima leitura busca do Xano: nunca fica dado errado.
+
+def _aplicar_no_cache(tabela: str, registro_id: int, registro: dict | None) -> None:
+    guardado = _cache.get(tabela)
+    if not guardado:
+        return
+    lista = [r for r in guardado[1] if r.get("id") != registro_id]
+    if registro is not None:
+        lista.append(copy.deepcopy(registro))
+    _cache[tabela] = (guardado[0], lista)
+
+
 async def criar(tabela: str, dados: dict) -> dict:
-    limpar_cache(tabela)
-    resposta = await _request("POST", f"{BASE_URL}/{tabela}", json=dados)
-    limpar_cache(tabela)
-    resposta.raise_for_status()
-    return resposta.json()
+    try:
+        resposta = await _request("POST", f"{BASE_URL}/{tabela}", json=dados)
+        resposta.raise_for_status()
+        registro = resposta.json()
+        _aplicar_no_cache(tabela, int(registro["id"]), registro)
+        return registro
+    except Exception:
+        limpar_cache(tabela)
+        raise
 
 
 async def atualizar(tabela: str, registro_id: int, dados: dict) -> dict:
-    limpar_cache(tabela)
-    resposta = await _request("PATCH", f"{BASE_URL}/{tabela}/{registro_id}", json=dados)
-    limpar_cache(tabela)
-    resposta.raise_for_status()
-    return resposta.json()
+    try:
+        resposta = await _request("PATCH", f"{BASE_URL}/{tabela}/{registro_id}", json=dados)
+        resposta.raise_for_status()
+        registro = resposta.json()
+        _aplicar_no_cache(tabela, int(registro_id), registro)
+        return registro
+    except Exception:
+        limpar_cache(tabela)
+        raise
 
 
 async def excluir(tabela: str, registro_id: int) -> None:
-    limpar_cache(tabela)
-    resposta = await _request("DELETE", f"{BASE_URL}/{tabela}/{registro_id}")
-    limpar_cache(tabela)
-    if resposta.status_code == 404:
-        return
-    resposta.raise_for_status()
+    try:
+        resposta = await _request("DELETE", f"{BASE_URL}/{tabela}/{registro_id}")
+        if resposta.status_code != 404:
+            resposta.raise_for_status()
+        _aplicar_no_cache(tabela, int(registro_id), None)
+    except Exception:
+        limpar_cache(tabela)
+        raise
 
 
 class UploadIndisponivel(Exception):
