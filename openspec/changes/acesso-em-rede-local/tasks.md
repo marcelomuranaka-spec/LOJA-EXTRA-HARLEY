@@ -21,7 +21,7 @@ Legenda: **[você]** = feito pelo usuário, ou com autorização explícita dele
 
 - [x] 3.1 Criar `scripts/iniciar_dev.ps1` (portas 3001/8001, backend em 127.0.0.1, `REFLEX_API_URL=http://localhost:8001`, `--env dev`); verificar que o app abre em `http://localhost:3001` e que o login funciona
 - [x] 3.2 Criar `scripts/iniciar_producao.ps1`, que lê `producao.local.ps1`, define `REFLEX_API_URL`/`REFLEX_FRONTEND_PORT`/`REFLEX_BACKEND_PORT`, roda `reflex run --env prod` e grava a saída em `logs/`; verificar que ele falha com mensagem clara se `producao.local.ps1` não existir
-- [ ] 3.3 Criar `scripts/parar_producao.ps1`, que encerra todos os processos (incluindo os filhos) cuja linha de comando pertence à pasta de produção; verificar que depois dele as portas 3000 e 8000 ficam livres (`Get-NetTCPConnection`)
+- [x] 3.3 Criar `scripts/parar_producao.ps1`, que encerra todos os processos (incluindo os filhos) cuja linha de comando pertence à pasta de produção; verificar que depois dele as portas 3000 e 8000 ficam livres (`Get-NetTCPConnection`)
 - [x] 3.4 Criar `scripts/atualizar_producao.ps1 [-Tag]` (parar → fetch → checkout da tag → `pip install -r requirements.txt` → iniciar pela tarefa agendada), recusando-se a rodar se houver alterações locais na produção; verificar a recusa com um arquivo alterado de propósito
 - [x] 3.5 Criar `scripts/publicar.ps1`, que recusa rodar com alterações não commitadas, cria a tag `prod-AAAAMMDD-HHMM` e chama a atualização; verificar a recusa com uma alteração pendente
 - [x] 3.6 Adicionar ao `rxconfig.py` um comentário indicando que endereço e portas vêm dos scripts (`REFLEX_*`); verificar que `scripts/iniciar_dev.ps1` continua funcionando; commit dos scripts

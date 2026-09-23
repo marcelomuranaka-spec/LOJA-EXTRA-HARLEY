@@ -34,6 +34,19 @@ Transações (Vendas), Ordens de Serviço e Itens de Ordem de Serviço.
 - **Compras** — dá entrada de mercadoria de um fornecedor com vários itens
   de uma vez; cada item já soma no estoque do produto correspondente.
 - **Fornecedores** e **Funcionários** — cadastros de apoio.
+- **Impressão de documentos** — botão **Imprimir** em Vendas, Ordens de
+  serviço, Compras e Motos da loja. Abre em nova aba uma folha A4
+  (comprovante de venda, ordem de serviço, entrada de mercadoria, recibo de
+  compra e venda ou ficha da moto) com cliente/fornecedor, itens, total e
+  assinaturas; imprime ou salva em PDF pelo navegador.
+
+### Desempenho
+
+O servidor guarda as tabelas do Xano em cache (5 min) e as mantém
+atualizadas em segundo plano (1 consulta a cada 20 s), então as telas abrem
+em cerca de 0,1–0,9 s e o limite de requisições do plano Free do Xano não é
+atingido. Toda gravação feita pelo app limpa o cache da tabela na hora; uma
+alteração feita direto no painel do Xano aparece no app em até 5 minutos.
 
 ## Como rodar (no VSCode)
 
@@ -288,5 +301,6 @@ projeto. Copie esse arquivo para outro lugar (um pen drive, um serviço de
 nuvem) periodicamente — ele **não** sobe para o Git (está no
 `.gitignore`) de propósito, exatamente para não misturar dados reais da
 loja com o código-fonte.
-#   L O J A - E X T R A - H A R L E Y  
+#   L O J A - E X T R A - H A R L E Y 
+ 
  
