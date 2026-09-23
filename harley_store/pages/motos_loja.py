@@ -1,5 +1,6 @@
 import reflex as rx
 
+from ..components.botao_imprimir import botao_imprimir
 from ..components.confirm_dialog import confirm_delete_button
 from ..components.layout import page
 from ..components.tema import BORDA, LARANJA, PRETO_CARTAO
@@ -75,6 +76,10 @@ def _cartao_moto(row: dict) -> rx.Component:
                     size="1",
                     variant="soft",
                     on_click=MotosLojaState.editar(row["id"]),
+                ),
+                botao_imprimir(
+                    "moto", row["id"],
+                    rx.cond(row["status"] == "Vendida", "Recibo", "Ficha"),
                 ),
                 confirm_delete_button(
                     MotosLojaState.excluir(row["id"]),

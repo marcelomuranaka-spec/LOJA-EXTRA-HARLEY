@@ -1,5 +1,6 @@
 import reflex as rx
 
+from ..components.botao_imprimir import botao_imprimir
 from ..components.confirm_dialog import confirm_delete_button
 from ..components.layout import page
 from ..state.compras_state import ComprasState
@@ -30,9 +31,13 @@ def _linha_historico(row: dict) -> rx.Component:
         rx.table.cell(row["qtd_itens"]),
         rx.table.cell(rx.text("R$ ", row["valor_total"])),
         rx.table.cell(
-            confirm_delete_button(
-                ComprasState.excluir_entrada(row["id"]),
-                item_label="esta compra e todos os seus itens",
+            rx.hstack(
+                botao_imprimir("compra", row["id"]),
+                confirm_delete_button(
+                    ComprasState.excluir_entrada(row["id"]),
+                    item_label="esta compra e todos os seus itens",
+                ),
+                spacing="2",
             )
         ),
     )

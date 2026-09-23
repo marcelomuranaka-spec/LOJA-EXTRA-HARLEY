@@ -11,6 +11,8 @@ para cada item, além de já dar entrada no estoque de cada produto.
 Dados vêm do backend Xano.
 """
 
+import asyncio
+
 import reflex as rx
 
 from .. import xano_client as xano
@@ -41,8 +43,13 @@ class ComprasState(rx.State):
 
     @rx.event
     async def carregar(self):
-        fornecedores = sorted(await xano.listar(TABELA_FORNECEDORES), key=lambda f: f["nome_fornecedor"])
-        produtos = sorted(await xano.listar(TABELA_PRODUTOS), key=lambda p: p["nome_produto"])
+        # As 4 tabelas são buscadas em paralelo.
+        fornecedores, produtos, entradas_todas, itens = await asyncio.gather(
+            xano.listar(TABELA_FORNECEDORES), xano.listar(TABELA_PRODUTOS),
+            xano.listar(TABELA_ENTRADA), xano.listar(TABELA_ITENS),
+        )
+        fornecedores.sort(key=lambda f: f["nome_fornecedor"])
+        produtos.sort(key=lambda p: p["nome_produto"])
         self.fornecedores_opcoes = [f"{f['id']} - {f['nome_fornecedor']}" for f in fornecedores]
         self.produtos_opcoes = [f"{p['id']} - {p['nome_produto']}" for p in produtos]
         if not self.fornecedor_selecionado and self.fornecedores_opcoes:
@@ -52,9 +59,9 @@ class ComprasState(rx.State):
 
         nomes_fornecedor = {f["id"]: f["nome_fornecedor"] for f in fornecedores}
 
-        entradas = sorted(await xano.listar(TABELA_ENTRADA), key=lambda e: e["data_entrada"], reverse=True)[:30]
+        entradas = sorted(entradas_todas, key=lambda e: e["data_entrada"], reverse=True)[:30]
         qtd_itens_por_entrada: dict[int, int] = {}
-        for item in await xano.listar(TABELA_ITENS):
+        for item in itens:
             qtd_itens_por_entrada[item["id_entrada"]] = qtd_itens_por_entrada.get(item["id_entrada"], 0) + 1
 
         self.historico = [

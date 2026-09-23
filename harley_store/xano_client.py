@@ -34,7 +34,9 @@ próprio heartbeat da conexão) enquanto a resposta do Xano não chega.
 from __future__ import annotations
 
 import asyncio
+import copy
 import datetime
+import time
 
 import httpx
 
@@ -43,46 +45,135 @@ _TIMEOUT = 15.0
 _MAX_TENTATIVAS = 5
 _ESPERA_BASE_SEGUNDOS = 1.5
 
+# Uma conexão reaproveitada (keep-alive) em vez de uma nova a cada chamada:
+# evita repetir o aperto de mão TLS com o Xano em toda consulta. Fica presa
+# ao loop de eventos em que foi criada; se o loop mudar, cria outra.
+_cliente: httpx.AsyncClient | None = None
+_cliente_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _obter_cliente() -> httpx.AsyncClient:
+    global _cliente, _cliente_loop
+    loop = asyncio.get_running_loop()
+    if _cliente is None or _cliente.is_closed or _cliente_loop is not loop:
+        _cliente = httpx.AsyncClient(timeout=_TIMEOUT)
+        _cliente_loop = loop
+    return _cliente
+
 
 async def _request(metodo: str, url: str, **kwargs) -> httpx.Response:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        for tentativa in range(_MAX_TENTATIVAS):
-            resposta = await client.request(metodo, url, **kwargs)
-            if resposta.status_code != 429:
-                return resposta
-            espera = float(resposta.headers.get("Retry-After", 0)) or _ESPERA_BASE_SEGUNDOS * (2**tentativa)
-            await asyncio.sleep(min(espera, 20))
+    client = _obter_cliente()
+    for tentativa in range(_MAX_TENTATIVAS):
+        resposta = await client.request(metodo, url, **kwargs)
+        if resposta.status_code != 429:
+            return resposta
+        espera = float(resposta.headers.get("Retry-After", 0)) or _ESPERA_BASE_SEGUNDOS * (2**tentativa)
+        await asyncio.sleep(min(espera, 20))
     return resposta
 
 
+# Cache curto das listagens. As telas relistam as mesmas tabelas o tempo todo
+# (a cada letra digitada numa busca, a cada troca de página, várias telas
+# pedindo "clientes"): com o cache essas leituras são instantâneas e o limite
+# de requisições do Xano Free deixa de ser atingido. Qualquer gravação feita
+# pelo app (criar/atualizar/excluir) apaga o cache da tabela na hora, então
+# quem acabou de salvar sempre vê o dado novo. Alterações feitas por fora do
+# app (painel do Xano) aparecem em no máximo _CACHE_SEGUNDOS (5 min).
+_CACHE_SEGUNDOS = 300.0
+_cache: dict[str, tuple[float, list[dict]]] = {}
+_travas: dict[str, asyncio.Lock] = {}
+
+
+def limpar_cache(tabela: str | None = None) -> None:
+    if tabela is None:
+        _cache.clear()
+    else:
+        _cache.pop(tabela, None)
+
+
 async def listar(tabela: str) -> list[dict]:
-    resposta = await _request("GET", f"{BASE_URL}/{tabela}")
-    resposta.raise_for_status()
-    return resposta.json() or []
+    # Devolve sempre uma CÓPIA: quem chama pode alterar os dicts à vontade.
+    guardado = _cache.get(tabela)
+    if guardado and time.monotonic() - guardado[0] < _CACHE_SEGUNDOS:
+        return copy.deepcopy(guardado[1])
+    # A trava evita que várias telas pedindo a mesma tabela ao mesmo tempo
+    # façam várias chamadas iguais ao Xano.
+    trava = _travas.setdefault(tabela, asyncio.Lock())
+    async with trava:
+        guardado = _cache.get(tabela)
+        if guardado and time.monotonic() - guardado[0] < _CACHE_SEGUNDOS:
+            return copy.deepcopy(guardado[1])
+        resposta = await _request("GET", f"{BASE_URL}/{tabela}")
+        resposta.raise_for_status()
+        dados = resposta.json() or []
+        _cache[tabela] = (time.monotonic(), dados)
+        return copy.deepcopy(dados)
+
+
+async def _renovar(tabela: str) -> None:
+    async with _travas.setdefault(tabela, asyncio.Lock()):
+        resposta = await _request("GET", f"{BASE_URL}/{tabela}")
+        resposta.raise_for_status()
+        _cache[tabela] = (time.monotonic(), resposta.json() or [])
+
+
+# Tabelas usadas pelas telas. Mantidas sempre em cache por manter_cache_aquecido.
+TABELAS_AQUECIDAS = [
+    "clientes", "produtos", "motos", "motos_clientes", "funcionarios", "fornecedores",
+    "transacoes", "ordens_servico", "itens_ordem_servico", "entrada_mercadoria", "itens_compra_estoque",
+]
+
+
+async def manter_cache_aquecido() -> None:
+    """Tarefa de fundo do servidor (registrada em harley_store.py): mantém as
+    tabelas sempre no cache, para que nenhuma tela precise esperar o Xano.
+
+    Primeira passada rápida ao subir (1 tabela a cada 3 s); depois renova uma
+    tabela a cada 20 s, ou seja, cada tabela a cada ~3,7 min, antes de vencer o
+    cache de 5 min. É 1 requisição a cada 20 s, bem abaixo do limite do plano
+    Free (~10 a cada 20 s), então sobra folga para as gravações."""
+    espera = 3.0
+    while True:
+        for tabela in TABELAS_AQUECIDAS:
+            try:
+                await _renovar(tabela)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass  # sem internet/Xano fora: tenta de novo na próxima volta
+            await asyncio.sleep(espera)
+        espera = 20.0
 
 
 async def buscar(tabela: str, registro_id: int) -> dict | None:
-    resposta = await _request("GET", f"{BASE_URL}/{tabela}/{registro_id}")
-    if resposta.status_code == 404:
-        return None
-    resposta.raise_for_status()
-    return resposta.json()
+    """Um registro pelo id. Procura na listagem em cache em vez de chamar o
+    Xano uma vez por registro: as tabelas da loja são pequenas, e um
+    documento de OS, por exemplo, precisava de 4 buscas avulsas, o que
+    estourava o limite de requisições do plano Free (erro 429 e espera)."""
+    registro_id = int(registro_id)
+    return next((r for r in await listar(tabela) if r.get("id") == registro_id), None)
 
 
 async def criar(tabela: str, dados: dict) -> dict:
+    limpar_cache(tabela)
     resposta = await _request("POST", f"{BASE_URL}/{tabela}", json=dados)
+    limpar_cache(tabela)
     resposta.raise_for_status()
     return resposta.json()
 
 
 async def atualizar(tabela: str, registro_id: int, dados: dict) -> dict:
+    limpar_cache(tabela)
     resposta = await _request("PATCH", f"{BASE_URL}/{tabela}/{registro_id}", json=dados)
+    limpar_cache(tabela)
     resposta.raise_for_status()
     return resposta.json()
 
 
 async def excluir(tabela: str, registro_id: int) -> None:
+    limpar_cache(tabela)
     resposta = await _request("DELETE", f"{BASE_URL}/{tabela}/{registro_id}")
+    limpar_cache(tabela)
     if resposta.status_code == 404:
         return
     resposta.raise_for_status()

@@ -45,6 +45,12 @@ $env:REFLEX_FRONTEND_PORT = '3000'
 $env:REFLEX_BACKEND_PORT  = '8000'
 Remove-Item Env:\REFLEX_BACKEND_HOST -ErrorAction SilentlyContinue  # padrao 0.0.0.0
 
+# UTF-8 em toda a saída do Python. Sem isto, quando o Next.js escreve uma
+# mensagem com símbolo especial (ex.: "⨯"), o Reflex falha ao repassá-la para
+# o log (codificação cp1252 do Windows) e a TELA cai, com o backend vivo.
+$env:PYTHONUTF8 = '1'
+$env:PYTHONIOENCODING = 'utf-8'
+
 $pastaLogs = Join-Path $raiz 'logs'
 New-Item -ItemType Directory -Force $pastaLogs | Out-Null
 $log = Join-Path $pastaLogs ("producao-{0:yyyyMMdd}.log" -f (Get-Date))
@@ -80,20 +86,40 @@ function Encerrar-Arvore([int]$raizPid) {
     }
 }
 
-Registrar "iniciando producao em http://${EnderecoProducao}:3000"
-
-# cmd /c faz o redirecionamento sem o PowerShell 5.1 transformar a saída de
-# erro do Reflex em exceção.
-$reflex = Join-Path $raiz '.venv\Scripts\reflex.exe'
-$processo = Start-Process cmd.exe -PassThru -WindowStyle Hidden -WorkingDirectory $raiz -ArgumentList @(
-    '/c', "`"`"$reflex`" run --env prod --loglevel info >> `"$log`" 2>&1`"")
+function Iniciar-Reflex {
+    Registrar "iniciando producao em http://${EnderecoProducao}:3000"
+    # cmd /c faz o redirecionamento sem o PowerShell 5.1 transformar a saída
+    # de erro do Reflex em exceção.
+    $reflex = Join-Path $raiz '.venv\Scripts\reflex.exe'
+    return Start-Process cmd.exe -PassThru -WindowStyle Hidden -WorkingDirectory $raiz -ArgumentList @(
+        '/c', "`"`"$reflex`" run --env prod --loglevel info >> `"$log`" 2>&1`"")
+}
+function Portas-No-Ar {
+    $escutando = @(Get-NetTCPConnection -LocalPort 3000, 8000 -State Listen -ErrorAction SilentlyContinue |
+                   Select-Object -ExpandProperty LocalPort -Unique)
+    return ($escutando.Count -eq 2)
+}
 
 # Daqui em diante nenhum erro pode derrubar o supervisor sem encerrar os filhos.
 $ErrorActionPreference = 'Continue'
 
-# Supervisão: encerra tudo quando houver pedido de parada; se o Reflex cair
-# sozinho, sai com erro (a tarefa agendada tenta de novo).
+# Supervisão com auto-recuperação:
+#  - pedido de parada (logs\PARAR)       -> encerra tudo e sai;
+#  - Reflex terminou sozinho             -> reinicia;
+#  - não subiu em 15 min (compilação)    -> reinicia;
+#  - tela ou backend sumiram por 90 s    -> reinicia (caso real: a tela
+#    caiu com o backend vivo, e o processo principal continuava "rodando").
+# No máximo 5 reinícios por hora, para não ficar em laço se houver um erro fixo.
+$LIMITE_SUBIDA_S = 15 * 60
+$LIMITE_FORA_S = 90
+$reinicios = New-Object System.Collections.Generic.List[datetime]
+$processo = Iniciar-Reflex
+$inicio = Get-Date
+$noAr = $false
+$foraDesde = $null
+
 while ($true) {
+    Start-Sleep -Seconds 5
     if (Test-Path $pedidoParada) {
         Registrar 'pedido de parada recebido; encerrando'
         Encerrar-Arvore $processo.Id
@@ -101,10 +127,35 @@ while ($true) {
         Registrar 'producao encerrada a pedido'
         exit 0
     }
+
+    $motivo = $null
     if ($processo.HasExited) {
-        Registrar "Reflex terminou sozinho (codigo $($processo.ExitCode))"
-        Encerrar-Arvore $processo.Id
-        exit 1
+        $motivo = "Reflex terminou sozinho (codigo $($processo.ExitCode))"
+    } elseif (Portas-No-Ar) {
+        if (-not $noAr) { Registrar ("producao no ar (subiu em {0:N0} s)" -f ((Get-Date) - $inicio).TotalSeconds) }
+        $noAr = $true
+        $foraDesde = $null
+    } elseif (-not $noAr) {
+        if (((Get-Date) - $inicio).TotalSeconds -gt $LIMITE_SUBIDA_S) { $motivo = 'nao subiu em 15 min' }
+    } else {
+        if (-not $foraDesde) { $foraDesde = Get-Date }
+        elseif (((Get-Date) - $foraDesde).TotalSeconds -gt $LIMITE_FORA_S) { $motivo = 'tela ou backend fora do ar ha 90 s' }
     }
-    Start-Sleep -Seconds 3
+
+    if ($motivo) {
+        $umaHoraAtras = (Get-Date).AddHours(-1)
+        $recentes = @($reinicios | Where-Object { $_ -ge $umaHoraAtras })
+        if ($recentes.Count -ge 5) {
+            Registrar "$motivo; 5 reinicios na ultima hora - desistindo (veja $log)"
+            Encerrar-Arvore $processo.Id
+            exit 1
+        }
+        Registrar "$motivo; reiniciando"
+        Encerrar-Arvore $processo.Id
+        $reinicios.Add((Get-Date))
+        $processo = Iniciar-Reflex
+        $inicio = Get-Date
+        $noAr = $false
+        $foraDesde = $null
+    }
 }

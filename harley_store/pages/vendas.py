@@ -1,5 +1,6 @@
 import reflex as rx
 
+from ..components.botao_imprimir import botao_imprimir
 from ..components.confirm_dialog import confirm_delete_button
 from ..components.layout import page
 from ..models import TIPOS_TRANSACAO
@@ -14,9 +15,13 @@ def _linha(row: dict) -> rx.Component:
         rx.table.cell(row["cliente_nome"]),
         rx.table.cell(rx.text("R$ ", row["valor_total"])),
         rx.table.cell(
-            confirm_delete_button(
-                VendasState.excluir(row["id"]),
-                item_label="esta venda",
+            rx.hstack(
+                botao_imprimir("venda", row["id"]),
+                confirm_delete_button(
+                    VendasState.excluir(row["id"]),
+                    item_label="esta venda",
+                ),
+                spacing="2",
             )
         ),
     )

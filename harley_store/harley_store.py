@@ -13,11 +13,13 @@ Para adicionar uma página nova:
 
 import reflex as rx
 
+from . import xano_client
 from .pages.clientes import clientes_page
 from .pages.compras import compras_page
 from .pages.dashboard import dashboard_page
 from .pages.fornecedores import fornecedores_page
 from .pages.funcionarios import funcionarios_page
+from .pages.impressao import impressao_page
 from .pages.inicio import inicio_page
 from .pages.login import login_page
 from .pages.motos import motos_page
@@ -31,6 +33,7 @@ from .state.clientes_state import ClientesState
 from .state.compras_state import ComprasState
 from .state.dashboard_state import DashboardState
 from .state.fornecedores_state import FornecedoresState
+from .state.impressao_state import ImpressaoState
 from .state.funcionarios_state import FuncionariosState
 from .state.motos_loja_state import MotosLojaState
 from .state.motos_state import MotosState
@@ -63,6 +66,10 @@ app = rx.App(
     # Visual do spinner (o Reflex só publica .css de assets/ por aqui)
     stylesheets=["/carregando.css"],
 )
+
+# Mantém as tabelas do Xano sempre em cache no servidor: as telas abrem sem
+# esperar o Xano e sem esbarrar no limite de requisições do plano Free.
+app.register_lifespan_task(xano_client.manter_cache_aquecido)
 
 app.add_page(
     inicio_page,
@@ -140,4 +147,11 @@ app.add_page(
     route="/usuarios",
     title="Usuários — Harley Store",
     on_load=[AuthState.exigir_login, UsuariosState.carregar],
+)
+# Documentos para impressão (venda, os, compra, moto) — abrem em nova aba.
+app.add_page(
+    impressao_page,
+    route="/imprimir/[doc_tipo]/[doc_id]",
+    title="Imprimir — Harley Store",
+    on_load=[AuthState.exigir_login, ImpressaoState.carregar],
 )

@@ -1,5 +1,7 @@
 """State de Ordens de Serviço (OrdemServico + ItemOrdemServico). Dados vêm do backend Xano."""
 
+import asyncio
+
 import reflex as rx
 
 from .. import xano_client as xano
@@ -33,13 +35,17 @@ class OrdensServicoState(rx.State):
 
     @rx.event
     async def carregar(self):
-        motos = sorted(await xano.listar(TABELA_MOTOS), key=lambda m: m["modelo"])
-        todos_funcionarios = await xano.listar(TABELA_FUNCIONARIOS)
+        # As 5 tabelas são buscadas em paralelo (em sequência eram ~5 esperas).
+        motos, todos_funcionarios, produtos, ordens, itens = await asyncio.gather(
+            xano.listar(TABELA_MOTOS), xano.listar(TABELA_FUNCIONARIOS), xano.listar(TABELA_PRODUTOS),
+            xano.listar(TABELA_OS), xano.listar(TABELA_ITENS),
+        )
+        motos.sort(key=lambda m: m["modelo"])
         mecanicos = sorted(
             [f for f in todos_funcionarios if f["tipo"] == "MECANICO"],
             key=lambda f: f["nome_funcionario"],
         )
-        produtos = sorted(await xano.listar(TABELA_PRODUTOS), key=lambda p: p["nome_produto"])
+        produtos.sort(key=lambda p: p["nome_produto"])
 
         self.motos_opcoes = [f"{m['id']} - {m['modelo']} ({m['placa']})" for m in motos]
         self.mecanicos_opcoes = [f"{f['id']} - {f['nome_funcionario']}" for f in mecanicos]
@@ -55,10 +61,10 @@ class OrdensServicoState(rx.State):
         # também pode haver mecânicos já cadastrados com outro tipo em OS antigas
         nomes_mecanico = {f["id"]: f["nome_funcionario"] for f in todos_funcionarios}
 
-        registros = sorted(await xano.listar(TABELA_OS), key=lambda o: o["data_abertura"], reverse=True)[:30]
+        registros = sorted(ordens, key=lambda o: o["data_abertura"], reverse=True)[:30]
         qtd_itens_por_os: dict[int, int] = {}
         valor_por_os: dict[int, float] = {}
-        for item in await xano.listar(TABELA_ITENS):
+        for item in itens:
             qtd_itens_por_os[item["id_os"]] = qtd_itens_por_os.get(item["id_os"], 0) + 1
             valor_por_os[item["id_os"]] = valor_por_os.get(item["id_os"], 0.0) + item["valor_total_item"]
 

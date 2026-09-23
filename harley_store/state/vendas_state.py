@@ -20,6 +20,7 @@ no Xano foi criado por importação de CSV, então `id_cliente` e
 representado como `0`, não `null`.
 """
 
+import asyncio
 from typing import Optional
 
 import reflex as rx
@@ -54,12 +55,22 @@ class VendasState(rx.State):
     quantidade: str = "1"
     valor_total: str = "0.00"
 
+    # Preço de cada produto, guardado no carregar(): recalcular o valor ao
+    # digitar a quantidade não precisa ir ao Xano a cada tecla.
+    _precos: dict[int, float] = {}
+
     @rx.event
     async def carregar(self):
-        funcionarios = sorted(await xano.listar(TABELA_FUNCIONARIOS), key=lambda f: f["nome_funcionario"])
-        clientes = sorted(await xano.listar(TABELA_CLIENTES), key=lambda c: c["nome_cliente"])
-        motos = sorted(await xano.listar(TABELA_MOTOS), key=lambda m: m["modelo"])
-        produtos = sorted(await xano.listar(TABELA_PRODUTOS), key=lambda p: p["nome_produto"])
+        # As 5 tabelas são buscadas em paralelo.
+        funcionarios, clientes, motos, produtos, transacoes = await asyncio.gather(
+            xano.listar(TABELA_FUNCIONARIOS), xano.listar(TABELA_CLIENTES), xano.listar(TABELA_MOTOS),
+            xano.listar(TABELA_PRODUTOS), xano.listar(TABELA),
+        )
+        funcionarios.sort(key=lambda f: f["nome_funcionario"])
+        clientes.sort(key=lambda c: c["nome_cliente"])
+        motos.sort(key=lambda m: m["modelo"])
+        produtos.sort(key=lambda p: p["nome_produto"])
+        self._precos = {p["id"]: p["preco_venda"] for p in produtos}
 
         self.funcionarios_opcoes = [f"{f['id']} - {f['nome_funcionario']}" for f in funcionarios]
         self.clientes_opcoes = [SEM_CLIENTE] + [f"{c['id']} - {c['nome_cliente']}" for c in clientes]
@@ -72,7 +83,7 @@ class VendasState(rx.State):
         nomes_funcionario = {f["id"]: f["nome_funcionario"] for f in funcionarios}
         nomes_cliente = {c["id"]: c["nome_cliente"] for c in clientes}
 
-        registros = sorted(await xano.listar(TABELA), key=lambda t: t["data_transacao"], reverse=True)[:50]
+        registros = sorted(transacoes, key=lambda t: t["data_transacao"], reverse=True)[:50]
 
         self.transacoes = [
             {
@@ -111,9 +122,9 @@ class VendasState(rx.State):
             qtd = int(self.quantidade or 0)
         except ValueError:
             return
-        produto = await xano.buscar(TABELA_PRODUTOS, produto_id)
-        if produto:
-            self.valor_total = f"{produto['preco_venda'] * qtd:.2f}"
+        preco = self._precos.get(produto_id)
+        if preco is not None:
+            self.valor_total = f"{preco * qtd:.2f}"
 
     @rx.event
     def nova_venda(self):

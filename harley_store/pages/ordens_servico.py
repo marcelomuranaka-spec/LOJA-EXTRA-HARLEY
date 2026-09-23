@@ -1,5 +1,6 @@
 import reflex as rx
 
+from ..components.botao_imprimir import botao_imprimir
 from ..components.confirm_dialog import confirm_delete_button
 from ..components.layout import page
 from ..models import STATUS_OS
@@ -39,9 +40,13 @@ def _linha_os(row: dict) -> rx.Component:
             )
         ),
         rx.table.cell(
-            confirm_delete_button(
-                OrdensServicoState.excluir_os(row["id"]),
-                item_label="esta ordem de serviço",
+            rx.hstack(
+                botao_imprimir("os", row["id"]),
+                confirm_delete_button(
+                    OrdensServicoState.excluir_os(row["id"]),
+                    item_label="esta ordem de serviço",
+                ),
+                spacing="2",
             )
         ),
     )

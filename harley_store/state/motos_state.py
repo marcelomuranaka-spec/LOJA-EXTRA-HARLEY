@@ -9,6 +9,7 @@ o nome do cliente na tabela em vez do id_cliente cru. Dados vêm do
 backend Xano.
 """
 
+import asyncio
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
@@ -40,11 +41,11 @@ class MotosState(rx.State):
 
     @rx.event
     async def carregar(self):
-        clientes = sorted(await xano.listar(TABELA_CLIENTES), key=lambda c: c["nome_cliente"])
+        clientes, registros = await asyncio.gather(xano.listar(TABELA_CLIENTES), xano.listar(TABELA))
+        clientes.sort(key=lambda c: c["nome_cliente"])
         self.clientes_opcoes = [f"{c['id']} - {c['nome_cliente']}" for c in clientes]
         nomes_por_id = {c["id"]: c["nome_cliente"] for c in clientes}
 
-        registros = await xano.listar(TABELA)
         if self.busca.strip():
             termo = self.busca.strip().lower()
             registros = [
