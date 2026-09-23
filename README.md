@@ -84,14 +84,70 @@ em python.org, marque "Add python.exe to PATH" na instalação, e use `py
    reflex db migrate
    ```
 
-6. Rode o app:
+6. Rode o app de **desenvolvimento** e acesse **http://localhost:3001**:
 
-   ```bash
-   reflex run
+   ```powershell
+   .\scripts\iniciar_dev.ps1
    ```
 
-7. Acesse **http://localhost:3000** no navegador. Deixe o terminal aberto —
-   é ele que mantém o servidor rodando (pode minimizar, mas não fechar).
+   O sistema que os funcionários usam é a **produção**, que roda sozinha;
+   veja a seção abaixo.
+
+## Produção e desenvolvimento (rede da loja)
+
+O mesmo notebook roda dois ambientes, em pastas separadas:
+
+| | Produção (funcionários) | Desenvolvimento |
+|---|---|---|
+| Endereço | **http://192.168.0.54:3000**, em qualquer aparelho da rede da loja | http://localhost:3001, só neste notebook |
+| Pasta | `C:\HARLEY_PROD` (clone git, **não edite arquivos lá**) | `C:\TESTE_LOJA_HARLEY` |
+| Portas | 3000 (tela) / 8000 (backend), liberadas no firewall só na rede Privada | 3001 / 8001, fechadas para a rede |
+| Como sobe | sozinha quando o notebook liga (tarefa agendada `HarleyStore-Producao`) | `.\scripts\iniciar_dev.ps1` |
+| Modo | `prod`: estável, não recarrega ao editar código | `dev`: recarrega a cada arquivo salvo |
+
+O IP da produção fica em `C:\HARLEY_PROD\producao.local.ps1`, fora do git.
+Ele deve ser o IP **reservado no roteador** para o Wi-Fi deste notebook
+(adaptador `ec:0e:c4:f6:76:0d`). Se mudar, edite esse arquivo e rode
+`.\scripts\atualizar_producao.ps1`.
+
+### Levar uma alteração para a produção
+
+1. Teste no desenvolvimento e faça o commit (`git add -A` e `git commit -m "..."`).
+2. Rode `.\scripts\publicar.ps1`. Ele recusa se houver algo sem commit,
+   cria a tag `prod-AAAAMMDD-HHMM`, envia ao GitHub e reinicia a produção
+   nessa versão. Os funcionários ficam cerca de 1 minuto sem o sistema,
+   enquanto ele recompila.
+
+### Voltar para a versão anterior
+
+```powershell
+git tag --list "prod-*"                                # versões publicadas
+.\scripts\atualizar_producao.ps1 -Tag prod-AAAAMMDD-HHMM
+```
+
+### Parar a produção
+
+`.\scripts\parar_producao.ps1`. **Não** use "Encerrar" no Agendador de
+Tarefas: isso deixa processos órfãos segurando as portas 3000/8000, que só
+somem reiniciando o notebook.
+
+Os registros ficam em `C:\HARLEY_PROD\logs\` (`producao-*.log` = saída do
+sistema; `supervisor-*.log` = início e parada).
+
+### Configuração do Windows (já aplicada)
+
+`scripts\configurar_windows.ps1` (como administrador) deixa o notebook
+pronto para servir durante o expediente: rede como Privada, nunca
+suspender na tomada, tampa fechada não suspende, horário ativo do Windows
+Update das 7h às 19h (reinícios automáticos só à noite), firewall e a
+tarefa de início automático. Pode ser executado de novo sem duplicar nada.
+
+### ⚠️ Os dois ambientes usam o MESMO banco Xano
+
+Não existe um banco "de teste": o que se faz no desenvolvimento altera os
+dados reais da loja. Teste só com registros claramente marcados como teste
+(por exemplo, com "TESTE" no nome) e apague-os em seguida. Não faça testes
+de estoque em produtos reais.
 
 Na primeira vez que abrir, todas as listas estarão vazias. Cadastre nesta
 ordem, porque uma tela depende da outra (é a mesma ordem de dependência das
