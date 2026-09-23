@@ -1,0 +1,32 @@
+assets/external/
+.web
+.states
+*.py[cod]
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Gerado pelo Reflex a cada build (frontend Next.js compilado)
+.web/
+
+# Banco de dados local — cada instalação tem o seu
+*.db
+*.db-journal
+
+.env
+
+*.log
+logs/
+
+# Estado local do Reflex (sessões) — gerado em execução
+.states/
+
+# Endereço de rede da produção — específico de cada instalação (ver
+# openspec/changes/acesso-em-rede-local/design.md, D1)
+producao.local.ps1
+
+# Fotos enviadas pelos usuários (produtos e motos) — dado local de cada
+# instalação, não faz parte do código-fonte.
+uploaded_files/

@@ -1,0 +1,37 @@
+schema: spec-driven
+
+context: |
+  Language: pt-BR
+  All artifacts must be written in pt-BR.
+  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
+
+  Projeto: Harley Store — app web da loja/oficina Harley-Davidson.
+  Stack: Reflex 0.7.14 (Python 3.12, venv em .venv). Backend de dados: Xano
+  (REST em harley_store/xano_client.py; auth em xano_auth_client.py).
+  Cada tela = par state/<nome>_state.py + pages/<nome>.py; rotas em
+  harley_store/harley_store.py; menu em components/layout.py.
+  Cores da marca centralizadas em components/tema.py (preto + laranja #F76511).
+  Atenção: o PATCH do Xano substitui o registro inteiro — sempre enviar
+  todos os campos. Datas do Xano são epoch em milissegundos.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
