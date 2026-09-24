@@ -49,13 +49,10 @@ function "Quick Start/enforce_role" {
     }
   
     // Check if the user's role level is sufficient for the required role.
-    conditional {
-      if ($user_role_level < $required_role_level) {
-        throw {
-          name = "accessdenied"
-          value = "User does not have the required role to perform this action. Required: " ~ $input.required_role ~ ", Actual: " ~ $user_role
-        }
-      }
+    // precondition (e não throw): o Xano responde 403, e não 200 com o erro no corpo.
+    precondition ($user_role_level >= $required_role_level) {
+      error_type = "accessdenied"
+      error = "User does not have the required role to perform this action. Required: " ~ $input.required_role ~ ", Actual: " ~ $user_role
     }
   }
 

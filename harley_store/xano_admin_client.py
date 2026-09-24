@@ -41,9 +41,14 @@ async def _chamar(token: str, metodo: str, url: str, **kwargs):
             raise ErroAdmin(mensagem)
         resposta.raise_for_status()
     try:
-        return resposta.json()
+        dados = resposta.json()
     except ValueError:
         return None
+    # A função Quick Start/enforce_role (versão antiga) recusava com `throw`,
+    # que o Xano devolve como 200 + {"statement": "Throw Error"}: não é sucesso.
+    if isinstance(dados, dict) and dados.get("statement") == "Throw Error":
+        raise SemPermissao()
+    return dados
 
 
 async def listar_usuarios(token: str) -> list[dict]:

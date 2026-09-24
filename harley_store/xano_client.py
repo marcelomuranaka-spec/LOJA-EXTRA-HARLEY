@@ -47,7 +47,7 @@ log = logging.getLogger("harley_store.xano")
 
 BASE_URL = "https://x8ki-letl-twmt.n7.xano.io/api:LtU_pM2N"
 AUTH_URL = "https://x8ki-letl-twmt.n7.xano.io/api:lH_WsSPl"
-_TIMEOUT = 15.0
+_TIMEOUT = 30.0  # o Xano Free às vezes leva >15 s; esperar é melhor que falhar uma venda
 
 
 # ------------------------------------------------------------ conta de serviço
@@ -119,6 +119,13 @@ def _obter_cliente() -> httpx.AsyncClient:
     return _cliente
 
 
+def _descartar_cliente(client: httpx.AsyncClient) -> None:
+    global _cliente
+    if _cliente is client:
+        _cliente = None
+        asyncio.get_running_loop().create_task(client.aclose())
+
+
 # Métodos que podem ser repetidos sem efeito colateral: o PATCH do Xano grava
 # o registro completo (mesmo resultado se repetido). POST NÃO entra: repetir
 # um POST que chegou ao Xano mas cuja resposta se perdeu criaria um registro
@@ -144,11 +151,16 @@ async def _request(metodo: str, url: str, *, autenticar: bool = True, **kwargs) 
             resposta = await _request(metodo, url, autenticar=False, headers=cabecalhos, **kwargs)
         return resposta
 
-    client = _obter_cliente()
     for tentativa in range(_MAX_TENTATIVAS):
+        client = _obter_cliente()
         try:
             resposta = await client.request(metodo, url, **kwargs)
-        except httpx.TransportError:
+        except httpx.TransportError as erro:
+            # Depois de uma queda de rede o pool de conexões pode ficar
+            # inutilizável ("All connection attempts failed" mesmo com a rede
+            # de volta): descarta o cliente, e a próxima chamada abre outro.
+            log.warning("falha de conexao com o Xano (%s): %r", metodo, erro)
+            _descartar_cliente(client)
             # rede instável / Xano demorando: tenta de novo só o que é seguro repetir
             if metodo.upper() not in _REPETIVEIS or tentativa == _MAX_TENTATIVAS - 1:
                 raise
@@ -229,8 +241,9 @@ async def manter_cache_aquecido() -> None:
                 await _renovar(tabela)
             except asyncio.CancelledError:
                 raise
-            except Exception:
-                pass  # sem internet/Xano fora: tenta de novo na próxima volta
+            except Exception as erro:
+                # sem internet/Xano fora: tenta de novo na próxima volta
+                log.warning("cache: nao foi possivel renovar %s: %r", tabela, erro)
             await asyncio.sleep(espera)
         espera = 20.0
 

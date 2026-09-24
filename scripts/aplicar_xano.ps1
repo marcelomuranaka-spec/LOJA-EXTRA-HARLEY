@@ -3,7 +3,7 @@
 
   Mostra a prévia das mudanças e pede confirmação antes de gravar (a CLI
   do Xano pergunta "sim/não"). Só envia arquivos alterados e NUNCA apaga
-  nada do Xano. A pasta function\ fica de fora (não foi alterada).
+  nada do Xano. Das funções, só as de quick_start\ são enviadas.
 
   Uso (PowerShell, na pasta do projeto):
       .\scripts\aplicar_xano.ps1              # prévia + confirmação
@@ -23,10 +23,10 @@ if (-not (Get-Command xano -ErrorAction SilentlyContinue)) {
 }
 
 Write-Host "Prévia das mudanças no Xano (nada é gravado nesta etapa):" -ForegroundColor Cyan
-xano workspace push -d $pasta -e 'function/**' --no-guids --dry-run
+xano workspace push -d $pasta -e 'function/relatorio/**' -e 'function/utils/**' --no-guids --dry-run
 if ($LASTEXITCODE -ne 0) { Write-Error 'A prévia falhou; nada foi alterado.'; exit 1 }
 if ($SoPrevia) { exit 0 }
 
 Write-Host "`nAplicando (a CLI vai pedir confirmação):" -ForegroundColor Yellow
-xano workspace push -d $pasta -e 'function/**' --no-guids
+xano workspace push -d $pasta -e 'function/relatorio/**' -e 'function/utils/**' --no-guids
 exit $LASTEXITCODE
