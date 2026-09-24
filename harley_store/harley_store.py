@@ -14,6 +14,7 @@ Para adicionar uma página nova:
 import reflex as rx
 
 from . import xano_client
+from .erros import configurar_logs, tratar_erro_backend
 from .pages.clientes import clientes_page
 from .pages.compras import compras_page
 from .pages.dashboard import dashboard_page
@@ -28,6 +29,7 @@ from .pages.ordens_servico import ordens_servico_page
 from .pages.produtos import produtos_page
 from .pages.usuarios import usuarios_page
 from .pages.vendas import vendas_page
+from .sessao import ExigeSessaoMiddleware
 from .state.auth_state import AuthState
 from .state.clientes_state import ClientesState
 from .state.compras_state import ComprasState
@@ -42,7 +44,11 @@ from .state.produtos_state import ProdutosState
 from .state.usuarios_state import UsuariosState
 from .state.vendas_state import VendasState
 
+configurar_logs()
+
 app = rx.App(
+    # Erros inesperados: mensagem clara ao funcionário e detalhes no log (erros.py).
+    backend_exception_handler=tratar_erro_backend,
     theme=rx.theme(
         # Visual Harley-Davidson: fundo preto + laranja (cores em components/tema.py)
         appearance="dark",
@@ -70,6 +76,15 @@ app = rx.App(
 # Mantém as tabelas do Xano sempre em cache no servidor: as telas abrem sem
 # esperar o Xano e sem esbarrar no limite de requisições do plano Free.
 app.register_lifespan_task(xano_client.manter_cache_aquecido)
+
+# Toda ação destes states exige sessão conferida no Xano, inclusive eventos
+# mandados direto pelo websocket (ver sessao.py). Um state novo precisa
+# entrar nesta lista.
+app.add_middleware(ExigeSessaoMiddleware([
+    ClientesState, ComprasState, DashboardState, FornecedoresState, FuncionariosState,
+    ImpressaoState, MotosLojaState, MotosState, OrdensServicoState, ProdutosState,
+    UsuariosState, VendasState,
+]))
 
 app.add_page(
     inicio_page,

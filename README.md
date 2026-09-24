@@ -21,9 +21,16 @@ Transações (Vendas), Ordens de Serviço e Itens de Ordem de Serviço.
   view `vw_resumo_operacoes` do script original, só que calculada em Python).
 - **Motos da loja** (`/motos-loja`) — estoque de motos à venda, ligado à
   tabela `motos` do Xano: marca, modelo, ano, cor, placa, chassi, km,
-  status (Em estoque / Reservada / Consignada / Vendida), preços de
-  compra e venda, datas de entrada/saída, cliente, observações e foto.
-- **Produtos** — catálogo e estoque, com aviso de estoque baixo (≤ 5 unidades).
+  RENAVAM, cilindrada, localização, situação (Em estoque, Em preparação,
+  Em manutenção, Reservada, Consignada, Indisponível, Vendida), preços de
+  compra e venda, datas de entrada/saída, cliente, observações e fotos
+  (principal + até 8 adicionais, com galeria ampliada). Só
+  "Vendida" tira a moto do estoque, e ela exige o cliente comprador.
+- **Produtos** — catálogo e estoque, com aviso de estoque baixo (≤ 5
+  unidades), busca, filtro por categoria e categorias sugeridas
+  (Motocicletas, Peças, Vestuário, Consumíveis, Acessórios, Motores,
+  Pneus, Lubrificantes, Outros). Uma categoria nova é só digitada: não
+  precisa mudar código.
 - **Clientes** e **Motos dos clientes** — cadastro e vínculo cliente → moto.
 - **Vendas / Balcão** — venda com **vários itens** (carrinho): produtos do
   estoque (preço já preenchido e editável, para descontos) e itens avulsos
@@ -33,10 +40,14 @@ Transações (Vendas), Ordens de Serviço e Itens de Ordem de Serviço.
   continuam no histórico como "Cancelada", saem do faturamento e devolvem
   os produtos ao estoque.
 - **Ordens de serviço** — abre OS vinculada a uma moto e um mecânico, permite
-  lançar peças usadas (que também baixam o estoque) e trocar o status
-  (Aberta → Em andamento → Concluída/Cancelada).
+  lançar peças usadas (que também baixam o estoque) e serviços / mão de
+  obra (descrição e valor, sem estoque), e trocar o status
+  (Aberta → Em andamento → Concluída/Cancelada). Excluir uma OS devolve
+  as peças ao estoque.
 - **Compras** — dá entrada de mercadoria de um fornecedor com vários itens
   de uma vez; cada item já soma no estoque do produto correspondente.
+  Excluir uma compra retira do estoque o que ela somou (e é recusado se
+  esses produtos já foram vendidos).
 - **Fornecedores** e **Funcionários** — cadastros de apoio.
 - **Impressão de documentos** — botão **Imprimir** em Vendas, Ordens de
   serviço, Compras e Motos da loja. Abre em nova aba uma folha A4
@@ -116,15 +127,15 @@ O mesmo notebook roda dois ambientes, em pastas separadas:
 
 | | Produção (funcionários) | Desenvolvimento |
 |---|---|---|
-| Endereço | **http://192.168.0.54:3000**, em qualquer aparelho da rede da loja | http://localhost:3001, só neste notebook |
-| Pasta | `C:\HARLEY_PROD` (clone git, **não edite arquivos lá**) | `C:\TESTE_LOJA_HARLEY` |
+| Endereço | **http://192.168.0.48:3000**, em qualquer aparelho da rede da loja | http://localhost:3001, só neste notebook |
+| Pasta | `C:\HARLEY_PROD` (clone git, **não edite arquivos lá**) | `C:\LOJA-EXTRA-HARLEY` |
 | Portas | 3000 (tela) / 8000 (backend), liberadas no firewall só na rede Privada | 3001 / 8001, fechadas para a rede |
 | Como sobe | sozinha quando o notebook liga (tarefa agendada `HarleyStore-Producao`) | `.\scripts\iniciar_dev.ps1` |
 | Modo | `prod`: estável, não recarrega ao editar código | `dev`: recarrega a cada arquivo salvo |
 
 O IP da produção fica em `C:\HARLEY_PROD\producao.local.ps1`, fora do git.
 Ele deve ser o IP **reservado no roteador** para o Wi-Fi deste notebook
-(adaptador `ec:0e:c4:f6:76:0d`). Se mudar, edite esse arquivo e rode
+(adaptador `4C-5F-70-A2-40-1D`). Se mudar, edite esse arquivo e rode
 `.\scripts\atualizar_producao.ps1`.
 
 ### Levar uma alteração para a produção
@@ -240,18 +251,84 @@ guardam só o valor total. Elas continuam aparecendo e podem ser canceladas,
 mas nesse caso nada volta ao estoque automaticamente, porque não se sabe o
 que foi vendido; o sistema avisa para conferir o estoque manualmente.
 
-## Esqueci minha senha
+## Regras de integridade (estoque, cadastros e sessão)
 
-Na tela de login, **Esqueci minha senha** pede só o email cadastrado, a
-nova senha e a repetição dela. Não há email de confirmação: o servidor do
-app chama em sequência os endpoints `reset/request-code` e
-`reset/confirm-code` que já existem no Xano (ver
-`xano_auth_client.redefinir_senha`). O código de uso único nunca chega ao
-navegador.
+- **Estoque:** toda alteração de saldo (venda, cancelamento, peças de OS,
+  compras, exclusão de OS/compra e edição do cadastro de produto) passa por
+  `harley_store/estoque.py`, com trava por produto e releitura do Xano. O
+  saldo nunca fica negativo, nenhuma movimentação simultânea se perde e,
+  se uma gravação falhar no meio, o que já foi feito é desfeito. Na edição
+  de um produto, vale a **variação** digitada: se houve uma venda enquanto
+  o formulário estava aberto, ela é preservada.
+- **Exclusões:** um cadastro usado em outro lugar não pode ser excluído
+  (cliente com motos ou vendas, produto usado em vendas/OS/compras,
+  funcionário com vendas/OS, fornecedor com compras, moto com OS). As
+  ligações ficam em `harley_store/dependencias.py`.
+- **Validações no servidor** (`harley_store/validacao.py`): CPF/CNPJ com
+  dígitos verificadores (gravados sempre formatados, e a duplicidade é
+  conferida pelos números), e-mail, telefone com DDD, placa (antiga ou
+  Mercosul), chassi, valores e quantidades. Fotos são conferidas pelo
+  conteúdo, não só pela extensão (máximo 5 MB).
+- **Sessão:** o login é conferido no Xano (`auth/me`), não basta existir
+  o cookie; ele vence em 24 h, junto com o token. Toda ação das telas é
+  barrada no servidor para quem não tem sessão válida
+  (`harley_store/sessao.py`), inclusive eventos mandados direto pelo
+  websocket. Um state novo precisa entrar na lista do
+  `ExigeSessaoMiddleware` em `harley_store/harley_store.py`.
+- **Erros:** falhas inesperadas aparecem ao funcionário como uma mensagem
+  clara em português; os detalhes vão para o log (na produção,
+  `logs\producao-*.log`), sem senhas nem tokens.
 
-> ⚠️ Sem confirmação por email, **quem souber o email de uma conta pode
-> trocar a senha dela**. Serve para uso interno na loja; se o app ficar
-> acessível pela internet, vale voltar a exigir um código enviado por email.
+## Testes automáticos
+
+Rodam sem internet e sem tocar no Xano (o estoque é testado com um Xano
+simulado, incluindo vendas simultâneas):
+
+```powershell
+.venv\Scripts\python.exe -m unittest discover -s tests -t . -v
+```
+
+## Contas, perfis e senhas
+
+- Não existe cadastro público: só um **administrador** cria contas, na tela
+  **Usuários do sistema** (que só aparece para administradores). Lá ele
+  também troca o e-mail, define uma nova senha, muda o perfil
+  (Administrador / Funcionário) e exclui contas.
+- **Esqueci minha senha:** a pessoa pede a um administrador, que define
+  uma nova senha para ela. (Antes, qualquer um trocava a senha de qualquer
+  conta sabendo só o e-mail.)
+- O Xano confere o perfil em toda operação de administração; um
+  funcionário comum recebe "sem permissão" mesmo chamando a API direto.
+- Ninguém altera o próprio perfil nem exclui a própria conta, então sempre
+  sobra ao menos um administrador.
+
+## Segurança da API do Xano e conta de serviço
+
+Todos os endpoints de dados do Xano exigem login. O **servidor** do app
+acessa os dados com uma **conta de serviço** própria ("Sistema Harley
+Store"), cujas credenciais ficam no arquivo `.env` da pasta de cada
+ambiente (desenvolvimento e `C:\HARLEY_PROD`), **fora do git**:
+
+```
+HARLEY_XANO_EMAIL=...
+HARLEY_XANO_SENHA=...
+```
+
+Sem esse arquivo o app não consegue ler nem gravar nada (o log mostra
+`HARLEY_XANO_EMAIL/HARLEY_XANO_SENHA ausentes`). Numa instalação nova,
+copie o `.env` de uma pasta existente. **Não exclua** a conta "Sistema
+Harley Store" na tela de usuários.
+
+As definições do Xano (tabelas e endpoints) ficam espelhadas na pasta
+`xano\`. Para aplicar mudanças feitas nela:
+
+```powershell
+.\scripts\aplicar_xano.ps1 -SoPrevia   # mostra o que mudaria
+.\scripts\aplicar_xano.ps1             # mostra e pede confirmação
+```
+
+`-Reverter` volta os endpoints ao estado de antes da auditoria de
+24/09/2026 (API aberta), só para emergência.
 
 ## Spinner de carregamento nos botões
 
@@ -262,27 +339,27 @@ inclusive nas futuras, sem mexer em nenhuma delas: `assets/carregando.js`
 observa as mensagens do websocket do Reflex, e o visual fica em
 `assets/carregando.css`.
 
-## Fotos das motos da loja (endpoint `upload/image` no Xano)
+## Fotos
 
-O campo `foto` da tabela `motos` é um campo de **imagem do Xano**. Mandar
-o arquivo direto no POST/PATCH da tabela não funciona (o Xano grava só o
-nome, sem a imagem), então o app envia a foto antes para um endpoint de
-upload. Enquanto ele não existir, a tela avisa e a moto pode ser salva
-sem foto. As fotos já cadastradas no Xano continuam aparecendo e são
-mantidas ao editar. Para liberar o envio:
+- Todas as fotos (motos da loja, produtos e motos de clientes) vão para o
+  armazenamento do Xano pelo endpoint `POST motos/foto` (campo `arquivo`),
+  então aparecem igual na produção e no desenvolvimento. Fotos antigas de
+  produtos/motos de clientes, guardadas em `uploaded_files/`, continuam
+  aparecendo.
+- Motos da loja: uma foto principal e até 8 adicionais; qualquer adicional
+  pode virar a principal. O botão de ampliar no cartão abre a galeria.
+- Aceitos: PNG, JPG e WEBP (produtos e motos de clientes também GIF), até
+  5 MB; o conteúdo do arquivo é conferido, não só a extensão.
+- Ao excluir uma moto, a foto continua guardada no Xano (o plano não
+  oferece exclusão de arquivo pela API); isso não aparece para ninguém.
 
-1. No Xano, abra o grupo de API onde estão os CRUDs das tabelas (a URL
-   base termina em `api:LtU_pM2N`).
-2. **Add API Endpoint** → método **POST**, caminho `upload/image`.
-3. Em **Inputs**, adicione um campo do tipo **File Resource** chamado
-   `content`.
-4. Em **Function Stack**, adicione **Create Image from File** (grupo
-   Storage) com *value* = `content` e acesso **public**; guarde a saída
-   numa variável (ex.: `image`).
-5. Em **Response**, devolva a variável `image` e publique.
+## Histórico de estoque
 
-> Cuidado ao mexer na tabela `motos` por fora do app: o PATCH do Xano
-> **substitui o registro inteiro** (campo não enviado volta vazio).
+Cada entrada e saída (venda, cancelamento, peça em OS, compra, exclusões,
+cadastro e ajuste manual) é registrada na tabela `movimentacoes_estoque`
+com data, quantidade, saldo depois da operação, documento de origem e
+usuário. Em **Produtos**, o botão **Histórico** mostra as movimentações de
+cada produto.
 
 ## OpenSpec
 
@@ -293,9 +370,14 @@ comandos do Claude Code em `.claude/`. Para propor uma mudança nova:
 
 ## Backup
 
-O banco inteiro da loja fica no arquivo `harley_store.db`, na pasta do
-projeto. Copie esse arquivo para outro lugar (um pen drive, um serviço de
-nuvem) periodicamente — ele **não** sobe para o Git (está no
-`.gitignore`) de propósito, exatamente para não misturar dados reais da
-loja com o código-fonte.
+Os dados da loja (clientes, produtos, vendas, OS, motos, usuários) ficam
+no **Xano**, não neste computador. Para ter uma cópia, exporte as tabelas
+pelo painel do Xano (Database → cada tabela → Export CSV) periodicamente e
+guarde os arquivos fora do notebook (pen drive ou nuvem).
+
+O arquivo `harley_store.db` (SQLite) e os `models.py`/`alembic/` são do
+início do projeto, antes da mudança para o Xano: o app não grava mais
+neles. As fotos de **produtos** e de **motos de clientes** ficam em
+`uploaded_files/` na pasta de cada ambiente (na produção,
+`C:\HARLEY_PROD\uploaded_files`); copie essa pasta junto com o backup.
 # LOJA-EXTRA-HARLEY

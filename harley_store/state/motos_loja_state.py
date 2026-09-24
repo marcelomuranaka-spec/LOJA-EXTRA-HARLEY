@@ -17,29 +17,37 @@ Dois cuidados específicos desta tabela no Xano:
 
 import asyncio
 import datetime
-from pathlib import Path
+import logging
+import re
 from typing import Optional
 
 import reflex as rx
 
 from .. import xano_client as xano
+from ..validacao import inteiro, numero, validar_imagem
+
+log = logging.getLogger("harley_store.motos_loja")
 
 TABELA = "motos"
 TABELA_CLIENTES = "clientes"
 
-STATUS_OPCOES = ["Em estoque", "Reservada", "Consignada", "Vendida"]
+# Situações da moto. "Em estoque" é a moto disponível para venda (nome
+# mantido porque já está gravado nos registros). O campo no Xano é texto
+# livre: para criar uma situação nova basta acrescentá-la aqui e em
+# pages/motos_loja.py (_STATUS_VISUAL). Só "Vendida" tira a moto do estoque.
+STATUS_OPCOES = [
+    "Em estoque", "Em preparação", "Em manutenção", "Reservada", "Consignada", "Indisponível", "Vendida",
+]
+STATUS_FORA_DO_ESTOQUE = {"Vendida"}
 SEM_CLIENTE = "— nenhum —"
 
-EXTENSOES_IMAGEM_PERMITIDAS = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
-TAMANHO_MAXIMO_IMAGEM = 5 * 1024 * 1024  # 5 MB
+EXTENSOES_IMAGEM_PERMITIDAS = {".png", ".jpg", ".jpeg", ".webp"}
 
+LOCALIZACOES_SUGERIDAS = ["Showroom", "Oficina", "Pátio", "Preparação", "Outra loja", "Com o cliente"]
+MAX_FOTOS_EXTRAS = 8
 
-def _numero(valor: str) -> float:
-    """Aceita "150000", "150.000,00" ou "150000.50"."""
-    texto = (valor or "").strip().replace("R$", "").replace(" ", "")
-    if "," in texto:
-        texto = texto.replace(".", "").replace(",", ".")
-    return float(texto) if texto else 0.0
+# Placa antiga (ABC1234) ou Mercosul (ABC1D23), sem hífen; moto 0 km pode não ter.
+_PLACA = re.compile(r"^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$")
 
 
 def _moeda(valor: float) -> str:
@@ -78,11 +86,27 @@ class MotosLojaState(rx.State):
     data_saida: str = ""
     observacoes: str = ""
     cliente_selecionado: str = SEM_CLIENTE
+    renavam: str = ""
+    cilindrada: str = ""
+    localizacao: str = ""
 
     foto_url: str = ""
+    # fotos adicionais: objetos de imagem do Xano (a principal fica em _foto)
+    _fotos_extras: list[dict] = []
+    fotos_extras_urls: list[str] = []
     erro_foto: str = ""
     enviando_foto: bool = False
     _foto: dict = {}
+
+    erro_form: str = ""
+    # foto aberta em tamanho grande (diálogo); "" = fechado
+    foto_ampliada: str = ""
+    foto_ampliada_titulo: str = ""
+    galeria: list[str] = []
+
+    @rx.var
+    def localizacoes_sugeridas(self) -> list[str]:
+        return LOCALIZACOES_SUGERIDAS
 
     @rx.var
     def status_opcoes(self) -> list[str]:
@@ -103,11 +127,12 @@ class MotosLojaState(rx.State):
             termo = self.busca.strip().lower()
             registros = [
                 r for r in registros
-                if termo in f"{r.get('marca', '')} {r.get('modelo', '')} {r.get('placa', '')} {r.get('chassi', '')}".lower()
+                if termo in " ".join(str(r.get(c) or "") for c in ("marca", "modelo", "placa", "chassi", "cor", "ano")).lower()
+                or termo in (nomes_por_id.get(r.get("cliente_id")) or "").lower()
             ]
         if self.filtro_status != "Todos":
             registros = [r for r in registros if r.get("status") == self.filtro_status]
-        registros.sort(key=lambda r: (r.get("marca") or "", r.get("modelo") or "", r.get("ano") or 0))
+        registros.sort(key=lambda r: ((r.get("marca") or "").lower(), (r.get("modelo") or "").lower(), r.get("ano") or 0))
 
         self.motos = [
             {
@@ -128,6 +153,11 @@ class MotosLojaState(rx.State):
                 "id_cliente": str(r.get("cliente_id") or 0),
                 "cliente_nome": nomes_por_id.get(r.get("cliente_id"), ""),
                 "foto_url": ((r.get("foto") or {}).get("url")) or "",
+                "fotos_urls": [u for u in [((r.get("foto") or {}).get("url")) or ""]
+                               + [(f or {}).get("url") or "" for f in (r.get("fotos") or []) if isinstance(f, dict)] if u],
+                "renavam": r.get("renavam") or "",
+                "cilindrada": str(r.get("cilindrada") or ""),
+                "localizacao": r.get("localizacao") or "",
             }
             for r in registros
         ]
@@ -144,7 +174,32 @@ class MotosLojaState(rx.State):
         await self.carregar()
 
     @rx.event
+    def ampliar_foto(self, url: str, titulo: str):
+        self.foto_ampliada = url
+        self.foto_ampliada_titulo = titulo
+        self.galeria = [url]
+
+    @rx.event
+    def ampliar_galeria(self, moto_id: str):
+        """Abre todas as fotos da moto (principal primeiro)."""
+        moto = next((m for m in self.motos if m["id"] == moto_id), None)
+        if moto and moto["fotos_urls"]:
+            self.galeria = list(moto["fotos_urls"])
+            self.foto_ampliada = self.galeria[0]
+            self.foto_ampliada_titulo = f"{moto['marca']} {moto['modelo']}"
+
+    @rx.event
+    def ver_foto(self, url: str):
+        self.foto_ampliada = url
+
+    @rx.event
+    def fechar_foto(self, aberto: bool = False):
+        if not aberto:
+            self.foto_ampliada = ""
+
+    @rx.event
     def novo(self):
+        self.erro_form = ""
         self.form_id = None
         self.marca = "Harley-Davidson"
         self.modelo = ""
@@ -163,12 +218,19 @@ class MotosLojaState(rx.State):
         self.foto_url = ""
         self.erro_foto = ""
         self._foto = {}
+        self._fotos_extras = []
+        self.fotos_extras_urls = []
+        self.renavam = ""
+        self.cilindrada = ""
+        self.localizacao = "Showroom"
 
     @rx.event
     async def editar(self, moto_id: str):
         registro = await xano.buscar(TABELA, int(moto_id))
         if registro is None:
-            return rx.window_alert("Essa moto não existe mais no Xano.")
+            await self.carregar()
+            return rx.toast.error("Essa moto não existe mais (foi excluída por outra pessoa).")
+        self.erro_form = ""
         self.form_id = registro["id"]
         self.marca = registro.get("marca") or ""
         self.modelo = registro.get("modelo") or ""
@@ -190,6 +252,11 @@ class MotosLojaState(rx.State):
         foto = registro.get("foto") or {}
         self._foto = foto if foto.get("path") else {}
         self.foto_url = foto.get("url") or ""
+        self._fotos_extras = [f for f in (registro.get("fotos") or []) if isinstance(f, dict) and f.get("url")]
+        self.fotos_extras_urls = [f["url"] for f in self._fotos_extras]
+        self.renavam = registro.get("renavam") or ""
+        self.cilindrada = str(registro.get("cilindrada") or "")
+        self.localizacao = registro.get("localizacao") or ""
         self.erro_foto = ""
         return rx.scroll_to("form-moto-loja")
 
@@ -199,25 +266,23 @@ class MotosLojaState(rx.State):
         if not files:
             return
         arquivo = files[0]
-        extensao = Path(arquivo.name or "").suffix.lower()
-        if extensao not in EXTENSOES_IMAGEM_PERMITIDAS:
-            self.erro_foto = "Formato inválido. Use PNG, JPG ou WEBP."
-            return
         conteudo = await arquivo.read()
-        if len(conteudo) > TAMANHO_MAXIMO_IMAGEM:
-            self.erro_foto = "Imagem muito grande (máximo 5 MB)."
+        erro, mime = validar_imagem(arquivo.name or "", conteudo, EXTENSOES_IMAGEM_PERMITIDAS)
+        if erro:
+            self.erro_foto = erro
             return
         self.enviando_foto = True
         yield
         try:
-            imagem = await xano.enviar_imagem(arquivo.name, conteudo, EXTENSOES_IMAGEM_PERMITIDAS[extensao])
+            imagem = await xano.enviar_imagem(arquivo.name, conteudo, mime)
         except xano.UploadIndisponivel:
             self.erro_foto = (
                 "O Xano ainda não tem o endpoint upload/image — veja a seção "
                 "\"Fotos das motos da loja\" no README. A moto pode ser salva sem foto."
             )
         except Exception:
-            self.erro_foto = "Não foi possível enviar a foto ao Xano. Tente novamente."
+            log.exception("falha ao enviar a foto da moto")
+            self.erro_foto = "Não foi possível enviar a foto. Verifique a conexão e tente novamente."
         else:
             self._foto = imagem
             self.foto_url = imagem.get("url") or ""
@@ -225,35 +290,125 @@ class MotosLojaState(rx.State):
             self.enviando_foto = False
 
     @rx.event
+    async def handle_upload_fotos_extras(self, files: list[rx.UploadFile]):
+        """Fotos adicionais (até MAX_FOTOS_EXTRAS), enviadas ao Xano uma a uma."""
+        self.erro_foto = ""
+        vagas = MAX_FOTOS_EXTRAS - len(self._fotos_extras)
+        if not files:
+            return
+        if vagas <= 0:
+            self.erro_foto = f"Limite de {MAX_FOTOS_EXTRAS} fotos adicionais atingido."
+            return
+        self.enviando_foto = True
+        yield
+        try:
+            for arquivo in files[:vagas]:
+                conteudo = await arquivo.read()
+                erro, mime = validar_imagem(arquivo.name or "", conteudo, EXTENSOES_IMAGEM_PERMITIDAS)
+                if erro:
+                    self.erro_foto = f"{arquivo.name}: {erro}"
+                    continue
+                try:
+                    imagem = await xano.enviar_imagem(arquivo.name or "foto", conteudo, mime)
+                except Exception:
+                    log.exception("falha ao enviar foto adicional")
+                    self.erro_foto = "Algumas fotos não puderam ser enviadas. Tente novamente."
+                    continue
+                self._fotos_extras = [*self._fotos_extras, imagem]
+                self.fotos_extras_urls = [f.get("url") or "" for f in self._fotos_extras]
+                yield
+            if len(files) > vagas:
+                self.erro_foto = f"Só {MAX_FOTOS_EXTRAS} fotos adicionais por moto: as excedentes foram ignoradas."
+        finally:
+            self.enviando_foto = False
+
+    @rx.event
+    def remover_foto_extra(self, indice: int):
+        self._fotos_extras = [f for i, f in enumerate(self._fotos_extras) if i != indice]
+        self.fotos_extras_urls = [f.get("url") or "" for f in self._fotos_extras]
+
+    @rx.event
+    def definir_principal(self, indice: int):
+        """A foto adicional escolhida vira a principal (a principal atual vai para as adicionais)."""
+        if not 0 <= indice < len(self._fotos_extras):
+            return
+        extras = list(self._fotos_extras)
+        nova_principal = extras.pop(indice)
+        if self._foto:
+            extras.insert(0, self._foto)
+        self._foto, self._fotos_extras = nova_principal, extras
+        self.foto_url = nova_principal.get("url") or ""
+        self.fotos_extras_urls = [f.get("url") or "" for f in extras]
+
+    @rx.event
     def remover_foto(self):
         self._foto = {}
         self.foto_url = ""
         self.erro_foto = ""
 
+    def _validar(self) -> str:
+        if self.status not in STATUS_OPCOES:
+            return "Escolha uma situação válida."
+        if not self.marca.strip() or not self.modelo.strip() or not self.chassi.strip():
+            return "Preencha marca, modelo e chassi."
+        placa = re.sub(r"[^A-Z0-9]", "", self.placa.upper())
+        if placa and not _PLACA.match(placa):
+            return "Placa inválida. Use o formato ABC1234 ou Mercosul ABC1D23 (ou deixe vazio se a moto não tem placa)."
+        if not re.fullmatch(r"[A-Z0-9]{6,17}", re.sub(r"\s", "", self.chassi).upper()):
+            return "Chassi inválido: use só letras e números (até 17 caracteres)."
+        try:
+            ano = inteiro(self.ano)
+            km = inteiro(self.quilometragem)
+            preco_compra = numero(self.preco_compra)
+            preco_venda = numero(self.preco_venda)
+        except ValueError:
+            return "Ano e quilometragem precisam ser números inteiros, e os preços valores válidos (ex.: 150.000,00)."
+        if ano and not 1903 <= ano <= datetime.date.today().year + 1:
+            return "Ano inválido."
+        if not 0 <= km <= 2_000_000:
+            return "Quilometragem inválida."
+        if preco_compra < 0 or preco_venda < 0 or max(preco_compra, preco_venda) > 100_000_000:
+            return "Preços não podem ser negativos nem exagerados. Confira os valores."
+        renavam = re.sub(r"\D", "", self.renavam)
+        if renavam and len(renavam) != 11:
+            return "RENAVAM inválido: são 11 dígitos (ou deixe vazio se ainda não houver)."
+        try:
+            cilindrada = inteiro(self.cilindrada)
+        except ValueError:
+            return "A cilindrada precisa ser um número inteiro (cm³), por exemplo 1868."
+        if cilindrada and not 50 <= cilindrada <= 3000:
+            return "Cilindrada fora do esperado (50 a 3000 cm³)."
+        if self.data_entrada and self.data_saida and self.data_saida < self.data_entrada:
+            return "A data de saída não pode ser anterior à data de entrada."
+        if self.status == "Vendida" and self.cliente_selecionado == SEM_CLIENTE:
+            return "Para marcar como Vendida, escolha o cliente comprador (ele aparece no recibo)."
+        if self.cliente_selecionado != SEM_CLIENTE and self.cliente_selecionado not in self.clientes_opcoes:
+            return "O cliente escolhido não existe mais. Escolha de novo."
+        return ""
+
     @rx.event
     async def salvar(self):
-        modelo = self.modelo.strip()
-        placa = self.placa.strip().upper()
-        chassi = self.chassi.strip().upper()
-        if not self.marca.strip() or not modelo or not chassi:
-            return rx.window_alert("Preencha marca, modelo e chassi.")
-        try:
-            ano = int(self.ano) if self.ano.strip() else 0
-            quilometragem = int(_numero(self.quilometragem))
-            preco_compra = _numero(self.preco_compra)
-            preco_venda = _numero(self.preco_venda)
-        except ValueError:
-            return rx.window_alert("Ano, quilometragem e preços precisam ser números.")
-        if ano and not 1903 <= ano <= datetime.date.today().year + 1:
-            return rx.window_alert("Ano inválido.")
+        self.erro_form = self._validar()
+        if self.erro_form:
+            return
+        modelo = " ".join(self.modelo.split())
+        placa = re.sub(r"[^A-Z0-9]", "", self.placa.upper())
+        chassi = re.sub(r"\s", "", self.chassi).upper()
+        ano = inteiro(self.ano)
+        quilometragem = inteiro(self.quilometragem)
+        preco_compra = numero(self.preco_compra)
+        preco_venda = numero(self.preco_venda)
 
-        duplicado = any(
-            ((placa and (r.get("placa") or "").upper() == placa) or (r.get("chassi") or "").upper() == chassi)
-            and r["id"] != self.form_id
-            for r in await xano.listar(TABELA)
+        duplicado = next(
+            (r for r in await xano.listar(TABELA)
+             if ((placa and re.sub(r"[^A-Z0-9]", "", (r.get("placa") or "").upper()) == placa)
+                 or (r.get("chassi") or "").upper() == chassi)
+             and r["id"] != self.form_id),
+            None,
         )
         if duplicado:
-            return rx.window_alert("Já existe uma moto cadastrada com essa placa ou chassi.")
+            self.erro_form = f"Já existe uma moto cadastrada com essa placa ou chassi ({duplicado.get('modelo')})."
+            return
 
         cliente_id = 0 if self.cliente_selecionado == SEM_CLIENTE else int(self.cliente_selecionado.split(" - ")[0])
         data_saida = self.data_saida
@@ -270,7 +425,7 @@ class MotosLojaState(rx.State):
             "chassi": chassi,
             "quilometragem": quilometragem,
             "status": self.status,
-            "em_estoque": self.status != "Vendida",
+            "em_estoque": self.status not in STATUS_FORA_DO_ESTOQUE,
             "preco_compra": preco_compra,
             "preco_venda": preco_venda,
             "data_entrada": _input_para_epoch(self.data_entrada),
@@ -278,14 +433,21 @@ class MotosLojaState(rx.State):
             "observacoes": self.observacoes.strip(),
             "cliente_id": cliente_id,
             "foto": self._foto or None,
+            "fotos": self._fotos_extras or None,
+            "renavam": re.sub(r"\D", "", self.renavam),
+            "cilindrada": inteiro(self.cilindrada) or None,
+            "localizacao": " ".join(self.localizacao.split()),
         }
         if self.form_id is None:
             await xano.criar(TABELA, dados)
+            mensagem = f"Moto “{modelo}” cadastrada."
         else:
             await xano.atualizar(TABELA, self.form_id, dados)
+            mensagem = f"Moto “{modelo}” atualizada."
 
         self.novo()
         await self.carregar()
+        return rx.toast.success(mensagem)
 
     @rx.event
     async def excluir(self, moto_id: str):
@@ -293,3 +455,4 @@ class MotosLojaState(rx.State):
         if self.form_id == int(moto_id):
             self.novo()
         await self.carregar()
+        return rx.toast.success("Moto excluída.")

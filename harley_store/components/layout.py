@@ -23,6 +23,7 @@ MENU_ITEMS = [
     ("/funcionarios", "id-card", "Funcionários"),
     ("/usuarios", "shield-user", "Usuários do sistema"),
 ]
+SO_ADMIN = {"/usuarios"}
 
 
 def _menu_link(href: str, icon: str, label: str) -> rx.Component:
@@ -66,7 +67,12 @@ def sidebar() -> rx.Component:
                 padding_bottom="0.75rem",
                 align_self="center",
             ),
-            *[_menu_link(href, icon, label) for href, icon, label in MENU_ITEMS],
+            *[
+                # itens só de administrador ficam ocultos para os demais (a regra vale no servidor)
+                rx.cond(AuthState.eh_admin, _menu_link(href, icon, label)) if href in SO_ADMIN
+                else _menu_link(href, icon, label)
+                for href, icon, label in MENU_ITEMS
+            ],
             rx.spacer(),
             rx.box(height="1px", width="100%", background=BORDA),
             rx.hstack(

@@ -1,6 +1,7 @@
 import reflex as rx
 
 from ..components.confirm_dialog import confirm_delete_button
+from ..components.formulario import lista_vazia, mensagem_erro
 from ..components.layout import page
 from ..models import TIPOS_FUNCIONARIO
 from ..state.funcionarios_state import FuncionariosState
@@ -50,6 +51,7 @@ def _formulario() -> rx.Component:
                 ),
                 spacing="3",
                 width="100%",
+                wrap="wrap",
             ),
             rx.hstack(
                 rx.select(
@@ -66,7 +68,9 @@ def _formulario() -> rx.Component:
                 ),
                 spacing="3",
                 width="100%",
+                wrap="wrap",
             ),
+            mensagem_erro(FuncionariosState.erro_form),
             rx.hstack(
                 rx.button(rx.icon("check", size=16), "Salvar", on_click=FuncionariosState.salvar),
                 rx.button(
@@ -82,6 +86,7 @@ def _formulario() -> rx.Component:
             align="start",
             width="100%",
         ),
+        id="form-funcionario",
         width="100%",
     )
 
@@ -90,7 +95,7 @@ def funcionarios_page() -> rx.Component:
     return page(
         _formulario(),
         rx.input(
-            placeholder="Buscar por nome...",
+            placeholder="Buscar por nome, cargo ou tipo...",
             value=FuncionariosState.busca,
             on_change=FuncionariosState.definir_busca,
             max_width="320px",
@@ -109,6 +114,7 @@ def funcionarios_page() -> rx.Component:
             width="100%",
             variant="surface",
         ),
+        lista_vazia(FuncionariosState.funcionarios, "Nenhum funcionário encontrado."),
         title="Funcionários",
         subtitle="Vendedores, mecânicos e gerência.",
     )

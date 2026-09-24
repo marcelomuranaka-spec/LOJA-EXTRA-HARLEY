@@ -17,8 +17,8 @@ import reflex as rx
 
 from .. import xano_client as xano
 from ..vendas_servico import esta_cancelada
+from .produtos_state import LIMITE_ESTOQUE_BAIXO  # uma só regra de "estoque baixo"
 
-LIMITE_ESTOQUE_BAIXO = 5
 MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
 
 
@@ -67,7 +67,7 @@ class DashboardState(rx.State):
         )
 
         self.total_produtos = len(produtos)
-        self.produtos_estoque_baixo = sum(1 for p in produtos if p["estoque_qtd"] <= LIMITE_ESTOQUE_BAIXO)
+        self.produtos_estoque_baixo = sum(1 for p in produtos if (p.get("estoque_qtd") or 0) <= LIMITE_ESTOQUE_BAIXO)
 
         self.total_clientes = len(lista_clientes)
 
@@ -83,7 +83,7 @@ class DashboardState(rx.State):
             and xano.epoch_ms_para_datetime(m["data_saida"]) >= inicio_mes
         )
 
-        self.os_em_aberto = sum(1 for o in ordens if o["status"] in ("ABERTA", "EM_ANDAMENTO"))
+        self.os_em_aberto = sum(1 for o in ordens if o.get("status") in ("ABERTA", "EM_ANDAMENTO"))
 
         transacoes_com_data = [
             (t, xano.epoch_ms_para_datetime(t["data_transacao"])) for t in transacoes

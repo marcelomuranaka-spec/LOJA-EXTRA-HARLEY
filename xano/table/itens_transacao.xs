@@ -1,29 +1,37 @@
-// Itens de cada venda (transacoes): o que foi vendido, em que quantidade e
-// por qual preço. Permite venda com vários itens e devolver o estoque ao
-// cancelar. produto_id = 0 indica item avulso (sem estoque, ex.: mão de obra).
-// descricao guarda o nome do produto no momento da venda, para o comprovante
-// continuar correto se o produto for renomeado ou excluído.
-//
-// ESPELHO DOCUMENTAL criado à mão a partir da tabela real (sem o guid que o
-// Xano atribui). Para sincronizar com a extensão do Xano, BAIXE a versão do
-// Xano; não envie este arquivo, ou uma tabela duplicada pode ser criada.
+// Stores individual items associated with a transaction.
 table itens_transacao {
   auth = false
 
   schema {
     int id
-    timestamp created_at?=now
+    timestamp created_at?=now {
+      visibility = "private"
+    }
   
-    // Relacionamento com Transacoes (a venda)
-    int transacao_id
+    // Reference to the transaction this item belongs to.
+    int transacao_id? {
+      table = "transacoes"
+    }
   
-    // Relacionamento com Produtos (0 = item avulso, sem estoque)
-    int produto_id
+    // Reference to the product or item sold.
+    int produto_id? {
+      table = "produtos"
+    }
   
-    text descricao
-    int quantidade
-    decimal valor_unitario
+    // Description of the item.
+    text descricao? filters=trim
+  
+    // Quantity of the item.
+    int quantidade?
+  
+    // Unit price of the item.
+    decimal valor_unitario?
   }
 
-  index = [{type: "primary", field: [{name: "id"}]}]
+  index = [
+    {type: "primary", field: [{name: "id"}]}
+    {type: "btree", field: [{name: "created_at", op: "desc"}]}
+  ]
+
+  guid = "I_un9pAorajQmorqzmwzbtPic0U"
 }

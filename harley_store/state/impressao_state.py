@@ -201,10 +201,10 @@ class ImpressaoState(rx.State):
         self.itens_titulo = "Peças e serviços"
         self.itens_cabecalho = ["Peça / serviço", "Qtd.", "Valor"]
         self.itens = [
-            [nomes.get(i.get("id_produto"), "(produto removido)"), str(i.get("quantidade") or 0),
-             _moeda(i.get("valor_total_item"))]
+            [i.get("descricao") or nomes.get(i.get("id_produto"), "(produto removido)"),
+             str(i.get("quantidade") or 0), _moeda(i.get("valor_total_item"))]
             for i in itens_os
-        ] or [["Nenhuma peça lançada", "", _moeda(0)]]
+        ] or [["Nenhuma peça ou serviço lançado", "", _moeda(0)]]
         self.total = _moeda(total)
         self.termo = ("Autorizo a execução dos serviços descritos acima. Declaro que retirei o veículo "
                       "nas condições descritas e que os serviços foram executados conforme combinado.")

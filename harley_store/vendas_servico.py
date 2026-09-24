@@ -74,7 +74,7 @@ async def _marcar_cancelada(venda: dict, motivo: str) -> None:
 # ---------------------------------------------------------------- registro
 
 async def registrar_venda(
-    tipo: str, id_funcionario: int, id_cliente: int, id_moto: int, itens: list[dict]
+    tipo: str, id_funcionario: int, id_cliente: int, id_moto: int, itens: list[dict], usuario: str = ""
 ) -> int:
     """itens: [{id_produto (0 = avulso), descricao, quantidade, valor_unitario}].
     Devolve o id da venda. Levanta FalhaVenda com mensagem para o usuário."""
@@ -89,7 +89,7 @@ async def registrar_venda(
 
     # 1) baixa todo o estoque, ou nada
     try:
-        await estoque.movimentar(baixas)
+        saldos = await estoque.movimentar(baixas)
     except estoque.EstoqueInsuficiente as erro:
         raise FalhaVenda("Estoque insuficiente: " + ", ".join(erro.produtos) + ". Nada foi alterado.")
     except estoque.ProdutoInexistente as erro:
@@ -140,6 +140,7 @@ async def registrar_venda(
             f"Os itens da venda nº {venda['id']} não puderam ser gravados (falha de conexão). "
             "O estoque foi devolvido e a venda ficou cancelada; registre-a de novo."
         )
+    await estoque.registrar_historico(baixas, saldos, "VENDA", int(venda["id"]), usuario)
     return int(venda["id"])
 
 
@@ -152,7 +153,7 @@ async def _devolver_sem_falhar(ajustes: dict[int, int]) -> None:
 
 # ------------------------------------------------------------ cancelamento
 
-async def cancelar_venda(venda_id: int, motivo: str = "") -> dict:
+async def cancelar_venda(venda_id: int, motivo: str = "", usuario: str = "") -> dict:
     """Devolve {"situacao": "cancelada"|"ja_cancelada"|"erro", "mensagem": str}.
     Marca a venda como cancelada ANTES de devolver o estoque: uma nova
     tentativa nunca devolve em dobro (design D4)."""
@@ -187,20 +188,21 @@ async def cancelar_venda(venda_id: int, motivo: str = "") -> dict:
             if pid:
                 devolucao[pid] = devolucao.get(pid, 0) + int(item.get("quantidade") or 0)
         try:
-            await estoque.movimentar(devolucao)
+            saldos = await estoque.movimentar(devolucao)
         except Exception:
             nomes = ", ".join(sorted({i.get("descricao") or f"produto {i.get(CAMPO_PRODUTO)}" for i in itens
                                       if int(i.get(CAMPO_PRODUTO) or 0)}))
             return {"situacao": "cancelada", "mensagem":
                     f"Venda nº {venda_id} cancelada, mas o estoque não pôde ser devolvido ({nomes}): ajuste manualmente."}
+        await estoque.registrar_historico(devolucao, saldos, "CANCELAMENTO_VENDA", venda_id, usuario)
         return {"situacao": "cancelada", "mensagem": ""}
 
 
-async def cancelar_varias(ids: list[int], motivo: str = "") -> list[dict]:
+async def cancelar_varias(ids: list[int], motivo: str = "", usuario: str = "") -> list[dict]:
     """Uma de cada vez (não estoura o limite de requisições do Xano Free)."""
     resultados = []
     for venda_id in ids:
-        resultado = await cancelar_venda(venda_id, motivo)
+        resultado = await cancelar_venda(venda_id, motivo, usuario)
         resultado["id"] = int(venda_id)
         resultados.append(resultado)
     return resultados

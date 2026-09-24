@@ -9,7 +9,7 @@ table produtos {
     text categoria
     int estoque_qtd?
     decimal preco_venda
-    text imagem?
+    text imagem? filters=trim
   }
 
   index = [{type: "primary", field: [{name: "id"}]}]

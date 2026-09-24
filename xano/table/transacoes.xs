@@ -20,15 +20,14 @@ table transacoes {
     timestamp data_transacao?=now
     decimal valor_total?
   
-    // Situação da venda: ATIVA ou CANCELADA (vazio = ativa, vendas antigas).
-    // Vendas não são apagadas pelo app: são canceladas e ficam no histórico.
-    text status?
+    // Current status of the transaction (e.g., 'completed', 'pending', 'canceled').
+    text status? filters=trim
   
-    // Data do cancelamento (criado no Xano como "date"; o app aceita date ou timestamp)
+    // Date when the transaction was canceled.
     date data_cancelamento?
   
-    // Motivo informado ao cancelar (opcional)
-    text motivo_cancelamento?
+    // Reason for the transaction cancellation.
+    text motivo_cancelamento? filters=trim
   }
 
   index = [{type: "primary", field: [{name: "id"}]}]

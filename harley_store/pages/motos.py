@@ -1,6 +1,7 @@
 import reflex as rx
 
 from ..components.confirm_dialog import confirm_delete_button
+from ..components.formulario import lista_vazia, mensagem_erro
 from ..components.layout import page
 from ..state.motos_state import MotosState
 
@@ -9,7 +10,7 @@ def _miniatura(row: dict) -> rx.Component:
     return rx.cond(
         row["imagem"] != "",
         rx.image(
-            src=rx.get_upload_url(row["imagem"]),
+            src=row["imagem_url"],
             width="42px",
             height="42px",
             border_radius="0.4rem",
@@ -61,7 +62,7 @@ def _campo_imagem() -> rx.Component:
             rx.cond(
                 MotosState.imagem != "",
                 rx.image(
-                    src=rx.get_upload_url(MotosState.imagem),
+                    src=MotosState.imagem_url,
                     width="90px",
                     height="90px",
                     border_radius="0.6rem",
@@ -81,8 +82,8 @@ def _campo_imagem() -> rx.Component:
             rx.vstack(
                 rx.upload(
                     rx.hstack(
-                        rx.icon("upload", size=16),
-                        rx.text("Selecionar foto"),
+                        rx.cond(MotosState.enviando_imagem, rx.spinner(size="2"), rx.icon("upload", size=16)),
+                        rx.text(rx.cond(MotosState.enviando_imagem, "Enviando...", "Selecionar foto")),
                         spacing="2",
                         align="center",
                     ),
@@ -175,8 +176,9 @@ def _formulario() -> rx.Component:
                         width="100%",
                     ),
                     _campo_imagem(),
+                    mensagem_erro(MotosState.erro_form),
                     rx.hstack(
-                        rx.button(rx.icon("check", size=16), "Salvar", on_click=MotosState.salvar),
+                        rx.button(rx.icon("check", size=16), "Salvar", on_click=MotosState.salvar, disabled=MotosState.enviando_imagem),
                         rx.button(
                             rx.icon("x", size=16),
                             "Cancelar",
@@ -192,6 +194,7 @@ def _formulario() -> rx.Component:
             align="start",
             width="100%",
         ),
+        id="form-moto-cliente",
         width="100%",
     )
 
@@ -200,7 +203,7 @@ def motos_page() -> rx.Component:
     return page(
         _formulario(),
         rx.input(
-            placeholder="Buscar por modelo ou placa...",
+            placeholder="Buscar por modelo, placa, chassi ou cliente...",
             value=MotosState.busca,
             on_change=MotosState.definir_busca,
             max_width="320px",
@@ -220,6 +223,7 @@ def motos_page() -> rx.Component:
             width="100%",
             variant="surface",
         ),
+        lista_vazia(MotosState.motos, "Nenhuma moto encontrada."),
         title="Motos dos clientes",
         subtitle="Motos que passam pela oficina ou foram compradas na loja.",
     )

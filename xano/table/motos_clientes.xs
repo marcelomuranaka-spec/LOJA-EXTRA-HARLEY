@@ -11,7 +11,7 @@ table motos_clientes {
     text modelo
     text placa filters=trim
     text chassi filters=trim
-    text imagem?
+    text imagem? filters=trim
   }
 
   index = [

@@ -1,6 +1,7 @@
 // Use this endpoint to send a welcome email to a user
 query "message/send_welcome_email" verb=POST {
   api_group = "Authentication"
+  auth = "user"
 
   input {
     // The ID of the user to send the welcome email to.
@@ -8,6 +9,11 @@ query "message/send_welcome_email" verb=POST {
   }
 
   stack {
+    // Só administradores (perfil "admin" na tabela user)
+    function.run "Quick Start/enforce_role" {
+      input = {user_id: $auth.id, required_role: "admin"}
+    } as $perfil_ok
+
     // Retrieve the user record for the given user ID.
     db.get user {
       field_name = "id"

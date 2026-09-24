@@ -43,7 +43,12 @@ function "Quick Start/generate_magic_link" {
     } as $updated_password_reset
   }
 
-  response = {token: $token, email: $updated_password_reset.email, name: $user|get:"name":0}
+  response = {
+    token: $token
+    email: $updated_password_reset.email
+    name : $user|get:"name":0
+  }
+
   tags = ["xano:quick-start"]
   guid = "zk1maesBcZhLc4Vv2bKImGMLm6M"
 }

@@ -13,6 +13,9 @@ table itens_ordem_servico {
   
     int quantidade
     decimal valor_total_item
+  
+    // Descrição do item: nome da peça ou do serviço (mão de obra, id_produto = 0)
+    text descricao? filters=trim
   }
 
   index = [{type: "primary", field: [{name: "id"}]}]

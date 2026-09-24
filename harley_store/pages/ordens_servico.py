@@ -2,6 +2,7 @@ import reflex as rx
 
 from ..components.botao_imprimir import botao_imprimir
 from ..components.confirm_dialog import confirm_delete_button
+from ..components.formulario import mensagem_erro
 from ..components.layout import page
 from ..models import STATUS_OS
 from ..state.os_state import OrdensServicoState
@@ -44,7 +45,7 @@ def _linha_os(row: dict) -> rx.Component:
                 botao_imprimir("os", row["id"]),
                 confirm_delete_button(
                     OrdensServicoState.excluir_os(row["id"]),
-                    item_label="esta ordem de serviço",
+                    item_label="esta ordem de serviço (as peças lançadas voltam ao estoque)",
                 ),
                 spacing="2",
             )
@@ -94,19 +95,19 @@ def _formulario() -> rx.Component:
             ),
             rx.divider(),
             rx.text("Peças usadas no serviço (opcional)", size="2", weight="bold"),
-            rx.hstack(
+            rx.flex(
                 rx.select(
                     OrdensServicoState.produtos_opcoes,
                     placeholder="Peça",
                     value=OrdensServicoState.item_produto_selecionado,
-                    on_change=OrdensServicoState.set_item_produto_selecionado,
+                    on_change=OrdensServicoState.definir_item_produto,
                     flex="1",
                 ),
                 rx.input(
                     placeholder="Qtd.",
                     type="number",
                     value=OrdensServicoState.item_quantidade,
-                    on_change=OrdensServicoState.set_item_quantidade,
+                    on_change=OrdensServicoState.definir_item_quantidade,
                     width="110px",
                     flex_shrink="0",
                 ),
@@ -124,8 +125,36 @@ def _formulario() -> rx.Component:
                     on_click=OrdensServicoState.adicionar_item,
                     flex_shrink="0",
                 ),
-                spacing="3",
+                gap="3",
                 width="100%",
+                wrap="wrap",
+            ),
+            rx.text("Serviços / mão de obra (opcional)", size="2", weight="bold"),
+            rx.flex(
+                rx.input(
+                    placeholder="Descrição do serviço (ex.: revisão de 10.000 km)",
+                    value=OrdensServicoState.servico_descricao,
+                    on_change=OrdensServicoState.set_servico_descricao,
+                    flex="1",
+                    min_width="220px",
+                ),
+                rx.input(
+                    placeholder="Valor (R$)",
+                    input_mode="decimal",
+                    value=OrdensServicoState.servico_valor,
+                    on_change=OrdensServicoState.set_servico_valor,
+                    width="160px",
+                    flex_shrink="0",
+                ),
+                rx.button(
+                    "Adicionar serviço",
+                    variant="soft",
+                    on_click=OrdensServicoState.adicionar_servico,
+                    flex_shrink="0",
+                ),
+                gap="3",
+                width="100%",
+                wrap="wrap",
             ),
             rx.cond(
                 OrdensServicoState.itens_atual.length() > 0,
@@ -152,6 +181,7 @@ def _formulario() -> rx.Component:
                     spacing="3",
                 ),
             ),
+            mensagem_erro(OrdensServicoState.erro_os),
             rx.button(rx.icon("check", size=16), "Abrir OS", on_click=OrdensServicoState.abrir_os, size="3"),
             spacing="3",
             align="start",

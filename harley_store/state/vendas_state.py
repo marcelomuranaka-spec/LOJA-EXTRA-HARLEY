@@ -22,6 +22,7 @@ import reflex as rx
 from .. import vendas_servico as servico
 from .. import xano_client as xano
 from ..models import TIPOS_TRANSACAO
+from .auth_state import AuthState
 
 TABELA = "transacoes"
 TABELA_ITENS = "itens_transacao"
@@ -255,7 +256,7 @@ class VendasState(rx.State):
         try:
             venda_id = await servico.registrar_venda(
                 self.tipo_transacao, int(self.funcionario_selecionado.split(" - ")[0]),
-                id_cliente, id_moto, itens,
+                id_cliente, id_moto, itens, (await self.get_state(AuthState)).usuario_logado,
             )
         except servico.FalhaVenda as erro:
             self.erro_venda = str(erro)
@@ -294,7 +295,8 @@ class VendasState(rx.State):
 
     @rx.event
     async def cancelar(self, venda_id: str):
-        resultado = await servico.cancelar_venda(int(venda_id), self.motivo_cancelamento)
+        usuario = (await self.get_state(AuthState)).usuario_logado
+        resultado = await servico.cancelar_venda(int(venda_id), self.motivo_cancelamento, usuario)
         resultado["id"] = int(venda_id)
         self._resumir([resultado])
         self.selecionadas = [i for i in self.selecionadas if i != venda_id]
@@ -305,7 +307,8 @@ class VendasState(rx.State):
         ids = [int(i) for i in self.selecionadas]
         if not ids:
             return
-        resultados = await servico.cancelar_varias(ids, self.motivo_cancelamento)
+        usuario = (await self.get_state(AuthState)).usuario_logado
+        resultados = await servico.cancelar_varias(ids, self.motivo_cancelamento, usuario)
         self._resumir(resultados)
         self.selecionadas = []
         await self.carregar()

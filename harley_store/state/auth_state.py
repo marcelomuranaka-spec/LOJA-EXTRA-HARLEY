@@ -1,23 +1,49 @@
 """
-State de autenticação (login / cadastro de usuário).
+State de autenticação (login e sessão).
+
+Não há cadastro público nem "esqueci minha senha" sem confirmação: contas,
+senhas e perfis são geridos por um administrador na tela Usuários.
 
 Login e cadastro usam a tabela `user` do Xano (grupo "Authentication" —
 ver `xano_auth_client.py`), não um banco local. Quem está logado é
-lembrado através de três cookies (`rx.Cookie`): `usuario_logado` (nome
-pra exibir), `auth_token` (token do Xano) e `auth_user_id` (id numérico
-do Xano) — por isso todo `on_load` de página protegida chama primeiro
-`AuthState.exigir_login`, que redireciona para `/login` se não houver
-token.
+lembrado por dois cookies (`rx.Cookie`): `usuario_logado` (nome pra
+exibir) e `auth_token` (token do Xano, que vence em 24 h; o cookie vence
+junto).
+
+O token é CONFERIDO NO XANO (`auth/me`), não basta existir: um cookie
+inventado ou vencido leva ao login. A conferência vale por
+`REVALIDAR_SEGUNDOS` e é refeita depois disso (cada `auth/me` custa uma
+requisição e um registro em `event_log` no Xano Free).
+
+Quem aplica a regra:
+- `exigir_login`, primeiro item do `on_load` de toda página protegida;
+- `sessao.ExigeSessaoMiddleware`, que barra no SERVIDOR qualquer evento
+  dos states protegidos (salvar, excluir...) vindo de quem não tem sessão
+  válida, mesmo que a pessoa mande o evento direto pelo websocket.
+
+A identidade (id, nome e perfil) vem do Xano, nunca de cookie editável.
 """
 
 from __future__ import annotations
 
+import logging
 import re
+import time
 
 import reflex as rx
 
 from .. import xano_auth_client
-from ..xano_auth_client import XanoAuthError
+from ..xano_auth_client import SessaoInvalida, XanoAuthError
+
+log = logging.getLogger("harley_store.auth")
+
+# Tokens do Xano valem 24 h (auth/login e auth/signup: expiration = 86400).
+VALIDADE_TOKEN_SEGUNDOS = 86400
+REVALIDAR_SEGUNDOS = 600
+
+SESSAO_OK = "ok"
+SESSAO_INVALIDA = "invalida"
+SESSAO_INDISPONIVEL = "indisponivel"
 
 _SENHA_REGEX = re.compile(r"^(?=.*[A-Za-z])(?=.*\d).{8,}$")
 
@@ -31,101 +57,121 @@ _MENSAGEM_SENHA_INVALIDA = "A senha precisa ter pelo menos 8 caracteres, com let
 
 
 class AuthState(rx.State):
-    # Guarda o nome do usuário logado (só pra exibição); "" significa deslogado.
-    usuario_logado: str = rx.Cookie("", name="hs_usuario")
-    auth_token: str = rx.Cookie("", name="hs_auth_token")
-    # É um id numérico do Xano — tipado como int (não str) porque o
-    # Reflex, ao reidratar o cookie no navegador, sempre interpreta um
-    # valor com cara de número como int; manter isso como str fazia esse
-    # aviso de tipo aparecer a cada login, mesmo com um cookie novo.
-    auth_user_id: int = rx.Cookie(0, name="hs_auth_user_id_v2")
+    # Nome do usuário logado (só pra exibição) e token do Xano.
+    usuario_logado: str = rx.Cookie(
+        "", name="hs_usuario", max_age=VALIDADE_TOKEN_SEGUNDOS, same_site="strict"
+    )
+    auth_token: str = rx.Cookie(
+        "", name="hs_auth_token", max_age=VALIDADE_TOKEN_SEGUNDOS, same_site="strict"
+    )
+
+    # Identidade conferida no Xano (não é cookie: não pode ser editada no navegador).
+    auth_user_id: int = 0
+    perfil: str = ""
+
+    # Última conferência do token (só no servidor, não vai para o navegador).
+    _token_conferido: str = ""
+    _conferido_em: float = 0.0
 
     # Campos do formulário de login
     login_email: str = ""
     login_senha: str = ""
     login_erro: str = ""
 
-    # Campos do formulário de cadastro
-    cad_nome_completo: str = ""
-    cad_email: str = ""
-    cad_senha: str = ""
-    cad_confirmar_senha: str = ""
-    cad_erro: str = ""
-
-    # Campos do formulário "Esqueci minha senha"
-    rec_email: str = ""
-    rec_senha: str = ""
-    rec_confirmar_senha: str = ""
-    rec_erro: str = ""
-
-    # Mensagem verde mostrada na aba "Entrar" (ex.: depois de redefinir a senha)
+    # Mensagem verde mostrada na aba "Entrar"
     login_sucesso: str = ""
 
-    aba_atual: str = "entrar"  # "entrar" | "cadastrar" | "esqueci"
+    aba_atual: str = "entrar"  # "entrar" | "esqueci"
 
     @rx.var
     def esta_logado(self) -> bool:
         return bool(self.auth_token)
 
-    @rx.event
-    def exigir_login(self):
-        """Chamar no on_load de toda página protegida."""
-        if not self.auth_token:
-            return rx.redirect("/login")
+    @rx.var
+    def eh_admin(self) -> bool:
+        return self.perfil == "admin"
+
+    # ------------------------------------------------------------- sessão
+
+    def _registrar_sessao(self, token: str, usuario_id: int, nome: str, perfil: str = "") -> None:
+        self.auth_token = token
+        self.auth_user_id = int(usuario_id)
+        self.usuario_logado = nome
+        if perfil:
+            self.perfil = perfil
+        self._token_conferido = token
+        self._conferido_em = time.monotonic()
+
+    def _limpar_sessao(self) -> None:
+        self.auth_token = ""
+        self.auth_user_id = 0
+        self.usuario_logado = ""
+        self.perfil = ""
+        self._token_conferido = ""
+        self._conferido_em = 0.0
+
+    async def validar_sessao(self) -> str:
+        """SESSAO_OK, SESSAO_INVALIDA ou SESSAO_INDISPONIVEL (Xano fora do ar
+        e o token ainda não foi conferido nesta sessão)."""
+        token = self.auth_token
+        if not token:
+            return SESSAO_INVALIDA
+        ja_conferido = token == self._token_conferido
+        if ja_conferido and time.monotonic() - self._conferido_em < REVALIDAR_SEGUNDOS:
+            return SESSAO_OK
+        try:
+            usuario = await xano_auth_client.me(token)
+        except SessaoInvalida:
+            log.info("sessao recusada pelo Xano (usuario_id=%s)", self.auth_user_id or "?")
+            self._limpar_sessao()
+            return SESSAO_INVALIDA
+        except Exception as erro:
+            # Xano fora do ar: quem já foi conferido continua trabalhando.
+            log.warning("nao foi possivel conferir a sessao: %r", erro)
+            return SESSAO_OK if ja_conferido else SESSAO_INDISPONIVEL
+        self._registrar_sessao(
+            token,
+            usuario["id"],
+            usuario.get("name") or usuario.get("email") or "",
+            usuario.get("role") or "",
+        )
+        return SESSAO_OK
 
     @rx.event
-    def redirecionar_se_ja_logado(self):
+    async def exigir_login(self):
+        """Chamar no on_load de toda página protegida (primeiro item)."""
+        situacao = await self.validar_sessao()
+        if situacao == SESSAO_INVALIDA:
+            return rx.redirect("/login")
+        if situacao == SESSAO_INDISPONIVEL:
+            return rx.toast.error(
+                "Não foi possível confirmar seu login agora (sem conexão com o servidor de dados). "
+                "Tente novamente em instantes.",
+                id="sessao_indisponivel",
+            )
+
+    @rx.event
+    def sessao_expirada(self):
+        """Disparado pelo middleware quando um evento chega sem sessão válida."""
+        self._limpar_sessao()
+        return [
+            rx.toast.warning("Sua sessão expirou. Entre novamente.", id="sessao_expirada"),
+            rx.redirect("/login"),
+        ]
+
+    @rx.event
+    async def redirecionar_se_ja_logado(self):
         """Chamar no on_load da página de login — se já estiver logado, pula para o painel."""
-        if self.auth_token:
+        if self.auth_token and await self.validar_sessao() == SESSAO_OK:
             return rx.redirect("/painel")
+
+    # ------------------------------------------------------------- telas
 
     @rx.event
     def definir_aba(self, aba: str):
-        self.aba_atual = aba
+        self.aba_atual = aba if aba in ("entrar", "esqueci") else "entrar"
         self.login_erro = ""
-        self.cad_erro = ""
-        self.rec_erro = ""
         self.login_sucesso = ""
-        if aba == "esqueci":
-            # já traz o email que a pessoa tentou usar no login
-            self.rec_email = self.login_email
-            self.rec_senha = ""
-            self.rec_confirmar_senha = ""
-
-    @rx.event
-    async def redefinir_senha(self):
-        email = self.rec_email.strip().lower()
-        senha = self.rec_senha
-        if not email or not senha or not self.rec_confirmar_senha:
-            self.rec_erro = "Preencha todos os campos."
-            return
-        if not _senha_valida(senha):
-            self.rec_erro = _MENSAGEM_SENHA_INVALIDA
-            return
-        if senha != self.rec_confirmar_senha:
-            self.rec_erro = "As senhas não coincidem."
-            return
-
-        try:
-            await xano_auth_client.redefinir_senha(email, senha)
-        except XanoAuthError as erro:
-            if "no user found" in str(erro).lower():
-                self.rec_erro = "Não há nenhuma conta cadastrada com esse email."
-            else:
-                self.rec_erro = "Não foi possível redefinir a senha. Tente novamente."
-            return
-        except Exception:
-            self.rec_erro = "Não foi possível conectar. Tente novamente em instantes."
-            return
-
-        self.rec_senha = ""
-        self.rec_confirmar_senha = ""
-        self.rec_erro = ""
-        self.login_email = email
-        self.login_senha = ""
-        self.login_erro = ""
-        self.aba_atual = "entrar"
-        self.login_sucesso = "Senha alterada! Entre com a nova senha."
 
     @rx.event
     async def fazer_login(self):
@@ -138,61 +184,27 @@ class AuthState(rx.State):
         try:
             resultado = await xano_auth_client.login(email, senha)
         except XanoAuthError:
+            log.info("login recusado para %s", email)
             self.login_erro = "Email ou senha incorretos."
             return
         except Exception:
+            log.exception("falha de conexao no login")
             self.login_erro = "Não foi possível conectar. Tente novamente em instantes."
             return
 
         self.login_erro = ""
         self.login_sucesso = ""
         self.login_senha = ""
-        self.auth_token = resultado["authToken"]
-        self.auth_user_id = int(resultado["user_id"])
-        self.usuario_logado = resultado.get("name") or email
-        return rx.redirect("/painel")
-
-    @rx.event
-    async def cadastrar(self):
-        nome_completo = self.cad_nome_completo.strip()
-        email = self.cad_email.strip()
-        senha = self.cad_senha
-        confirmar = self.cad_confirmar_senha
-
-        if not nome_completo or not email or not senha:
-            self.cad_erro = "Preencha todos os campos."
-            return
-        if not _senha_valida(senha):
-            self.cad_erro = _MENSAGEM_SENHA_INVALIDA
-            return
-        if senha != confirmar:
-            self.cad_erro = "As senhas não coincidem."
-            return
-
+        perfil = ""
         try:
-            resultado = await xano_auth_client.signup(nome_completo, email, senha)
-        except XanoAuthError as erro:
-            if "already exists" in str(erro).lower():
-                self.cad_erro = "Esse email já está cadastrado."
-            else:
-                self.cad_erro = "Não foi possível criar a conta. Verifique os dados e tente novamente."
-            return
+            perfil = (await xano_auth_client.me(resultado["authToken"])).get("role") or ""
         except Exception:
-            self.cad_erro = "Não foi possível conectar. Tente novamente em instantes."
-            return
-
-        self.cad_erro = ""
-        self.cad_senha = ""
-        self.cad_confirmar_senha = ""
-        self.auth_token = resultado["authToken"]
-        self.auth_user_id = int(resultado["user_id"])
-        self.usuario_logado = nome_completo
+            log.warning("login sem conferir o perfil (sera lido na proxima validacao)")
+        self._registrar_sessao(resultado["authToken"], resultado["user_id"], resultado.get("name") or email, perfil)
+        log.info("login usuario_id=%s perfil=%s", resultado["user_id"], perfil or "?")
         return rx.redirect("/painel")
 
     @rx.event
     def sair(self):
-        self.auth_token = ""
-        self.auth_user_id = 0
-        self.usuario_logado = ""
+        self._limpar_sessao()
         return rx.redirect("/login")
-

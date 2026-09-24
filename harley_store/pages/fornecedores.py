@@ -6,6 +6,7 @@ Para criar uma página nova parecida, copie este arquivo.
 import reflex as rx
 
 from ..components.confirm_dialog import confirm_delete_button
+from ..components.formulario import lista_vazia, mensagem_erro
 from ..components.layout import page
 from ..state.fornecedores_state import FornecedoresState
 
@@ -56,6 +57,7 @@ def _formulario() -> rx.Component:
                 ),
                 spacing="3",
                 width="100%",
+                wrap="wrap",
             ),
             rx.input(
                 placeholder="Contato (telefone / e-mail)",
@@ -63,6 +65,7 @@ def _formulario() -> rx.Component:
                 on_change=FornecedoresState.set_contato,
                 width="100%",
             ),
+            mensagem_erro(FornecedoresState.erro_form),
             rx.hstack(
                 rx.button(rx.icon("check", size=16), "Salvar", on_click=FornecedoresState.salvar),
                 rx.button(
@@ -78,6 +81,7 @@ def _formulario() -> rx.Component:
             align="start",
             width="100%",
         ),
+        id="form-fornecedor",
         width="100%",
     )
 
@@ -86,7 +90,7 @@ def fornecedores_page() -> rx.Component:
     return page(
         _formulario(),
         rx.input(
-            placeholder="Buscar por nome...",
+            placeholder="Buscar por nome, CNPJ ou contato...",
             value=FornecedoresState.busca,
             on_change=FornecedoresState.definir_busca,
             max_width="320px",
@@ -104,6 +108,7 @@ def fornecedores_page() -> rx.Component:
             width="100%",
             variant="surface",
         ),
+        lista_vazia(FornecedoresState.fornecedores, "Nenhum fornecedor encontrado."),
         title="Fornecedores",
         subtitle="Empresas que abastecem o estoque da loja.",
     )

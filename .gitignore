@@ -30,3 +30,7 @@ producao.local.ps1
 # Fotos enviadas pelos usuários (produtos e motos) — dado local de cada
 # instalação, não faz parte do código-fonte.
 uploaded_files/
+
+# Xano: token da pagina de documentacao da API (segredo) e copia de seguranca
+xano/api/harley/harley.xs
+xano_backup/

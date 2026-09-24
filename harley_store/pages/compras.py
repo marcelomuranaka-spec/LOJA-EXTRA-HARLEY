@@ -2,6 +2,7 @@ import reflex as rx
 
 from ..components.botao_imprimir import botao_imprimir
 from ..components.confirm_dialog import confirm_delete_button
+from ..components.formulario import mensagem_erro
 from ..components.layout import page
 from ..state.compras_state import ComprasState
 
@@ -35,7 +36,7 @@ def _linha_historico(row: dict) -> rx.Component:
                 botao_imprimir("compra", row["id"]),
                 confirm_delete_button(
                     ComprasState.excluir_entrada(row["id"]),
-                    item_label="esta compra e todos os seus itens",
+                    item_label="esta compra e todos os seus itens (as quantidades saem do estoque)",
                 ),
                 spacing="2",
             )
@@ -119,6 +120,7 @@ def _formulario() -> rx.Component:
                     spacing="3",
                 ),
             ),
+            mensagem_erro(ComprasState.erro_compra),
             rx.button(
                 rx.icon("check", size=16),
                 "Finalizar compra",
