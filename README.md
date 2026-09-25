@@ -127,16 +127,21 @@ O mesmo notebook roda dois ambientes, em pastas separadas:
 
 | | Produção (funcionários) | Desenvolvimento |
 |---|---|---|
-| Endereço | **http://192.168.0.48:3000**, em qualquer aparelho da rede da loja | http://localhost:3001, só neste notebook |
+| Endereço | **http://192.168.0.12:3000**, em qualquer aparelho da rede da loja | http://localhost:3001, só neste notebook |
 | Pasta | `C:\HARLEY_PROD` (clone git, **não edite arquivos lá**) | `C:\LOJA-EXTRA-HARLEY` |
 | Portas | 3000 (tela) / 8000 (backend), liberadas no firewall só na rede Privada | 3001 / 8001, fechadas para a rede |
 | Como sobe | sozinha quando o notebook liga (tarefa agendada `HarleyStore-Producao`) | `.\scripts\iniciar_dev.ps1` |
 | Modo | `prod`: estável, não recarrega ao editar código | `dev`: recarrega a cada arquivo salvo |
 
 O IP da produção fica em `C:\HARLEY_PROD\producao.local.ps1`, fora do git.
-Ele deve ser o IP **reservado no roteador** para o Wi-Fi deste notebook
-(adaptador `4C-5F-70-A2-40-1D`). Se mudar, edite esse arquivo e rode
-`.\scripts\atualizar_producao.ps1`.
+O Wi-Fi deste notebook (adaptador `4C-5F-70-A2-40-1D`, rede `SIDLAR_2G`)
+está com **IP fixo 192.168.0.12**, configurado no Windows por
+`scripts\ip_do_servidor.ps1` (como administrador). Com IP fixo o notebook
+não conecta direito em outras redes: para usá-lo fora da loja, rode
+`.\scripts\ip_do_servidor.ps1 -Automatico`, e `-Fixo` ao voltar. Se o IP
+mudar, edite `producao.local.ps1` e rode `.\scriptstualizar_producao.ps1`.
+(O ideal, quando houver a senha do modem Claro, é trocar o IP fixo por uma
+reserva de DHCP no modem.)
 
 ### Levar uma alteração para a produção
 
