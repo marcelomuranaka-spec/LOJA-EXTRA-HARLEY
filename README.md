@@ -121,6 +121,24 @@ em python.org, marque "Add python.exe to PATH" na instalação, e use `py
    O sistema que os funcionários usam é a **produção**, que roda sozinha;
    veja a seção abaixo.
 
+## Modo demonstração (atual): só `reflex run`, neste computador
+
+Hoje o sistema **não sobe sozinho** e não fica na rede da loja: roda só
+quando você manda, em http://localhost:3000.
+
+1. Abra a pasta `C:\LOJA-EXTRA-HARLEY` no VSCode.
+2. Abra um terminal (`Terminal → Novo Terminal`): ele já abre com `(.venv)`.
+3. Rode `reflex run` e acesse **http://localhost:3000** (ou `Ctrl+Shift+B`).
+4. Para parar: `Ctrl+C` no terminal.
+
+Precisa de internet (os dados estão no Xano) e do arquivo `.env` na pasta.
+
+Para voltar a ser o servidor da loja (como administrador): reative a
+tarefa com `Enable-ScheduledTask -TaskName HarleyStore-Producao`, fixe o IP
+com `.\scripts\ip_do_servidor.ps1 -Fixo` e ligue a produção com
+`Start-ScheduledTask -TaskName HarleyStore-Producao`. A seção abaixo
+descreve esse modo.
+
 ## Produção e desenvolvimento (rede da loja)
 
 O mesmo notebook roda dois ambientes, em pastas separadas:
