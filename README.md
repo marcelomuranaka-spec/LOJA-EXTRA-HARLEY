@@ -15,10 +15,15 @@ Transações (Vendas), Ordens de Serviço e Itens de Ordem de Serviço.
   vai para o Painel (`/painel`). O logo fica em `assets/harley_logo.png`
   e as cores da marca em `harley_store/components/tema.py`.
 - **Painel** (`/painel`) — visual Harley (preto + laranja): motos em
-  estoque, valor do estoque de motos, motos vendidas no mês, faturamento
-  de hoje/do mês, gráfico de faturamento dos últimos 12 meses, produtos,
-  estoque baixo, clientes, OS em aberto e um extrato recente (igual à
-  view `vw_resumo_operacoes` do script original, só que calculada em Python).
+  estoque, **Estoque de Motos** (preço de compra) e **Estoque de Produtos**
+  (quantidade × preço de venda), motos vendidas no mês, faturamento de
+  hoje e **Faturamento de Motos / de Produtos** do mês, gráfico de
+  faturamento dos últimos 12 meses (motos + produtos, com o total do dia e
+  do mês), produtos, estoque baixo, clientes, OS em aberto e um extrato
+  recente (igual à view `vw_resumo_operacoes` do script original, só que
+  calculada em Python). O faturamento não inclui vendas canceladas, OS,
+  compras nem itens avulsos; dia e mês seguem o fuso de São Paulo. As
+  regras ficam no topo de `harley_store/state/dashboard_state.py`.
 - **Produtos** — catálogo e estoque, separado em **abas por categoria**
   (com a quantidade de cada uma), aviso de estoque baixo (≤ 5 unidades),
   busca e categorias sugeridas (Peças, Vestuário, Consumíveis, Acessórios,

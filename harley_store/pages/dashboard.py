@@ -51,7 +51,14 @@ def _secao(titulo: str, *filhos: rx.Component) -> rx.Component:
 
 def _grafico_faturamento() -> rx.Component:
     return rx.box(
-        rx.text("Faturamento por mês — últimos 12 meses (R$)", size="3", weight="bold", color="white"),
+        rx.text("Faturamento por mês — motos + produtos, últimos 12 meses (R$)", size="3", weight="bold", color="white"),
+        rx.text(
+            "Hoje: R$ ", DashboardState.faturamento_hoje,
+            "  ·  Mês: R$ ", DashboardState.faturamento_total_mes,
+            "  (motos + produtos)",
+            size="2",
+            color=TEXTO_SECUNDARIO,
+        ),
         rx.recharts.bar_chart(
             rx.recharts.cartesian_grid(vertical=False, stroke=BORDA, stroke_dasharray="3 3"),
             rx.recharts.x_axis(data_key="mes", stroke=TEXTO_SECUNDARIO, tick_line=False, axis_line=False),
@@ -105,12 +112,15 @@ def _linha_atividade(row: dict) -> rx.Component:
 def dashboard_page() -> rx.Component:
     return page(
         _secao(
-            "MOTOS DA LOJA",
+            "ESTOQUE",
             rx.grid(
                 _cartao("Motos em estoque", DashboardState.motos_em_estoque, "bike", href="/produtos?aba=motos"),
-                _cartao("Valor do estoque", rx.text("R$ ", DashboardState.valor_estoque_motos), "gem", href="/produtos?aba=motos"),
+                _cartao("Estoque de Motos (custo)", rx.text("R$ ", DashboardState.valor_estoque_motos), "gem",
+                        href="/produtos?aba=motos"),
                 _cartao("Vendidas no mês", DashboardState.motos_vendidas_mes, "badge-dollar-sign", href="/produtos?aba=motos"),
-                columns=rx.breakpoints(initial="1", sm="3"),
+                _cartao("Estoque de Produtos", rx.text("R$ ", DashboardState.valor_estoque_produtos), "package-check",
+                        href="/produtos"),
+                columns=rx.breakpoints(initial="1", sm="2", md="4"),
                 spacing="4",
                 width="100%",
             ),
@@ -119,8 +129,11 @@ def dashboard_page() -> rx.Component:
             "FATURAMENTO",
             rx.grid(
                 _cartao("Faturamento de hoje", rx.text("R$ ", DashboardState.faturamento_hoje), "wallet", href="/vendas"),
-                _cartao("Faturamento do mês", rx.text("R$ ", DashboardState.faturamento_mes), "chart-line", href="/vendas"),
-                columns=rx.breakpoints(initial="1", xs="2"),
+                _cartao("Faturamento de Motos (mês)", rx.text("R$ ", DashboardState.faturamento_motos_mes), "bike",
+                        href="/produtos?aba=motos"),
+                _cartao("Faturamento de Produtos (mês)", rx.text("R$ ", DashboardState.faturamento_produtos_mes),
+                        "chart-line", href="/vendas"),
+                columns=rx.breakpoints(initial="1", sm="3"),
                 spacing="4",
                 width="100%",
             ),

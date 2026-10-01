@@ -5,6 +5,7 @@ pydantic>=2.7,<3
 sqlmodel==0.0.24  # versões mais novas quebram o patch pydantic.v1 do reflex 0.7.14
 fastapi>=0.115.0  # reflex 0.7.14 exige fastapi>=0.115
 httpx>=0.28,<1.0  # cliente HTTP usado por xano_client.py para falar com o backend Xano
+tzdata>=2024.1  # fuso America/Sao_Paulo no Windows (dia/mês do faturamento no Painel)
 
 # Descomente a linha abaixo apenas se for conectar num SQL Server de verdade
 # (ver instrução em rxconfig.py) em vez do arquivo SQLite local:
