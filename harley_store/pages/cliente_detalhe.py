@@ -98,7 +98,7 @@ def _indicadores() -> rx.Component:
         cartao_indicador("Total gasto", D.total_gasto, "wallet"),
         cartao_indicador("Última compra", D.ultima_compra, "calendar"),
         cartao_indicador("Motos", D.motos.length(), "bike"),
-        columns=rx.breakpoints(initial="2", md="4"),
+        columns=rx.breakpoints(initial="1", xs="2", md="4"),
         spacing="3",
         width="100%",
     )
