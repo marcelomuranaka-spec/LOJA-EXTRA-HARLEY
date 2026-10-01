@@ -4,6 +4,7 @@ from typing import Optional
 
 import reflex as rx
 
+from .. import integridade
 from .. import xano_client as xano
 
 TABELA = "clientes"
@@ -93,5 +94,8 @@ class ClientesState(rx.State):
 
     @rx.event
     async def excluir(self, cliente_id: str):
+        encontrados = await integridade.dependentes(TABELA, int(cliente_id))
+        if encontrados:
+            return rx.window_alert(integridade.mensagem_bloqueio("este cliente", encontrados))
         await xano.excluir(TABELA, int(cliente_id))
         await self.carregar()

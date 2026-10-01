@@ -11,6 +11,7 @@ from typing import Optional
 
 import reflex as rx
 
+from .. import integridade
 from .. import xano_client as xano
 
 TABELA = "fornecedores"
@@ -87,5 +88,8 @@ class FornecedoresState(rx.State):
 
     @rx.event
     async def excluir(self, fornecedor_id: str):
+        encontrados = await integridade.dependentes(TABELA, int(fornecedor_id))
+        if encontrados:
+            return rx.window_alert(integridade.mensagem_bloqueio("este fornecedor", encontrados))
         await xano.excluir(TABELA, int(fornecedor_id))
         await self.carregar()

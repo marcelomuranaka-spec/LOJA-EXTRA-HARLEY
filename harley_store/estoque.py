@@ -45,7 +45,7 @@ class ProdutoInexistente(Exception):
 
 async def _ler_produto(produto_id: int) -> dict | None:
     """Leitura direta do Xano, sem cache: dentro da trava o saldo precisa ser o real."""
-    resposta = await xano._request("GET", f"{xano.BASE_URL}/{TABELA_PRODUTOS}/{produto_id}")
+    resposta = await xano._request_xano("GET", f"{xano.BASE_URL}/{TABELA_PRODUTOS}/{produto_id}")
     if resposta.status_code == 404:
         return None
     resposta.raise_for_status()

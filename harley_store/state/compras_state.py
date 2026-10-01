@@ -15,6 +15,7 @@ import asyncio
 
 import reflex as rx
 
+from .. import estoque
 from .. import xano_client as xano
 
 TABELA_ENTRADA = "entrada_mercadoria"
@@ -125,6 +126,7 @@ class ComprasState(rx.State):
             },
         )
 
+        entradas_estoque: dict[int, int] = {}
         for item in self.itens_atual:
             produto_id = int(item["produto_id"])
             quantidade = int(item["quantidade"])
@@ -139,12 +141,20 @@ class ComprasState(rx.State):
                     "valor_unitario": valor_unitario,
                 },
             )
-            produto = await xano.buscar(TABELA_PRODUTOS, produto_id)
-            if produto is not None:
-                produto["estoque_qtd"] += quantidade
-                await xano.atualizar(TABELA_PRODUTOS, produto_id, {k: v for k, v in produto.items() if k != "id"})
+            entradas_estoque[produto_id] = entradas_estoque.get(produto_id, 0) + quantidade
 
         self.itens_atual = []
+        # Mesmo caminho das vendas (trava por produto e saldo lido direto do
+        # Xano): somar sobre o saldo do cache podia apagar a baixa de uma
+        # venda feita ao mesmo tempo.
+        try:
+            await estoque.movimentar(entradas_estoque)
+        except Exception:
+            await self.carregar()
+            return rx.window_alert(
+                f"Compra nº {entrada['id']} registrada, mas o estoque não pôde ser atualizado. "
+                "Ajuste as quantidades na página Produtos."
+            )
         await self.carregar()
 
     @rx.event

@@ -5,6 +5,7 @@ from typing import Optional
 import reflex as rx
 
 from ..models import TIPOS_FUNCIONARIO
+from .. import integridade
 from .. import xano_client as xano
 
 TABELA = "funcionarios"
@@ -82,5 +83,8 @@ class FuncionariosState(rx.State):
 
     @rx.event
     async def excluir(self, funcionario_id: str):
+        encontrados = await integridade.dependentes(TABELA, int(funcionario_id))
+        if encontrados:
+            return rx.window_alert(integridade.mensagem_bloqueio("este funcionário", encontrados))
         await xano.excluir(TABELA, int(funcionario_id))
         await self.carregar()

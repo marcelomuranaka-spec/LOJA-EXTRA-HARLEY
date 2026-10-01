@@ -16,6 +16,7 @@ from uuid import uuid4
 
 import reflex as rx
 
+from .. import integridade
 from .. import xano_client as xano
 
 TABELA = "motos_clientes"
@@ -159,5 +160,8 @@ class MotosState(rx.State):
 
     @rx.event
     async def excluir(self, moto_id: str):
+        encontrados = await integridade.dependentes(TABELA, int(moto_id))
+        if encontrados:
+            return rx.window_alert(integridade.mensagem_bloqueio("esta moto", encontrados))
         await xano.excluir(TABELA, int(moto_id))
         await self.carregar()

@@ -43,7 +43,7 @@ def esta_cancelada(transacao: dict) -> bool:
 
 async def _ler_direto(caminho: str):
     """Leitura sem cache: usada dentro das travas, onde o dado precisa ser o atual."""
-    resposta = await xano._request("GET", f"{xano.BASE_URL}/{caminho}")
+    resposta = await xano._request_xano("GET", f"{xano.BASE_URL}/{caminho}")
     if resposta.status_code == 404:
         return None
     resposta.raise_for_status()
