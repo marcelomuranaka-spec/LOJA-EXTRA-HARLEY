@@ -1,9 +1,17 @@
+"""
+Produtos: catálogo separado em abas por categoria, mais a aba "Motos"
+(estoque de motos da loja, que antes era a página Motos da loja). Ao trocar
+de aba, o formulário de cadastro troca junto: produto ou moto.
+"""
+
 import reflex as rx
 
 from ..components.confirm_dialog import confirm_delete_button
 from ..components.formulario import campo, lista_vazia, mensagem_erro
 from ..components.layout import page
-from ..state.produtos_state import ProdutosState
+from ..state.motos_loja_state import MotosLojaState
+from ..state.produtos_state import MOTOS, TODAS, ProdutosState
+from .motos_loja import dialogo_foto_moto, secao_motos
 
 
 def _miniatura(row: dict) -> rx.Component:
@@ -288,8 +296,38 @@ def _dialogo_historico() -> rx.Component:
     )
 
 
-def produtos_page() -> rx.Component:
-    return page(
+def _aba(nome, qtd, icone: str = "", ativa=None) -> rx.Component:
+    ativa = ProdutosState.filtro_categoria == nome if ativa is None else ativa
+    return rx.button(
+        *([rx.icon(icone, size=14)] if icone else []),
+        nome,
+        rx.badge(qtd, variant=rx.cond(ativa, "solid", "soft"), color_scheme="gray", high_contrast=True, radius="full"),
+        size="2",
+        variant=rx.cond(ativa, "solid", "soft"),
+        color_scheme=rx.cond(ativa, "orange", "gray"),
+        on_click=ProdutosState.definir_filtro_categoria(nome),
+        aria_pressed=ativa,
+    )
+
+
+def _abas() -> rx.Component:
+    """Categorias do catálogo + aba Motos (estoque de motos da loja)."""
+    return rx.flex(
+        _aba(TODAS, ProdutosState.total_produtos, "layout-grid"),
+        rx.foreach(ProdutosState.abas_categoria, lambda c: _aba(c["nome"], c["qtd"])),
+        rx.box(width="1px", height="1.6rem", background=rx.color("gray", 6), margin_x="0.25rem"),
+        _aba(MOTOS, MotosLojaState.total_motos, "bike"),
+        gap="2",
+        wrap="wrap",
+        align="center",
+        width="100%",
+        padding_bottom="0.5rem",
+        border_bottom=f"1px solid {rx.color('gray', 5)}",
+    )
+
+
+def _secao_produtos() -> rx.Component:
+    return rx.vstack(
         _formulario(),
         rx.flex(
             rx.input(
@@ -298,12 +336,6 @@ def produtos_page() -> rx.Component:
                 value=ProdutosState.busca,
                 on_change=ProdutosState.definir_busca,
                 width=["100%", "100%", "320px"],
-            ),
-            rx.select(
-                ProdutosState.filtros_categoria,
-                value=ProdutosState.filtro_categoria,
-                on_change=ProdutosState.definir_filtro_categoria,
-                aria_label="Filtrar por categoria",
             ),
             rx.hstack(
                 rx.switch(
@@ -335,7 +367,18 @@ def produtos_page() -> rx.Component:
             variant="surface",
         ),
         lista_vazia(ProdutosState.produtos, "Nenhum produto encontrado com esses filtros."),
+        align="start",
+        width="100%",
+        spacing="4",
+    )
+
+
+def produtos_page() -> rx.Component:
+    return page(
+        _abas(),
+        rx.cond(ProdutosState.aba_motos, secao_motos(), _secao_produtos()),
         _dialogo_historico(),
+        dialogo_foto_moto(),
         title="Produtos",
-        subtitle="Catálogo e estoque de peças, acessórios e itens vendidos na loja.",
+        subtitle="Catálogo da loja por categoria — peças, acessórios, vestuário e as motos à venda.",
     )

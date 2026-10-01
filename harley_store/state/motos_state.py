@@ -17,6 +17,7 @@ from typing import Optional
 import reflex as rx
 
 from .. import xano_client as xano
+from ..fotos_oficiais import foto_oficial
 from ..dependencias import em_uso, mensagem_em_uso
 from ..validacao import validar_imagem
 
@@ -89,7 +90,9 @@ class MotosState(rx.State):
                 "id_cliente": str(r.get("id_cliente") or 0),
                 "cliente_nome": nomes_por_id.get(r.get("id_cliente"), "(cliente removido)"),
                 "imagem": r.get("imagem") or "",
-                "imagem_url": xano.url_da_imagem(r.get("imagem")),
+                # foto enviada pela loja; sem ela, a foto oficial do modelo cadastrado
+                "imagem_url": xano.url_da_imagem(r.get("imagem")) or foto_oficial(r.get("modelo") or ""),
+                "foto_oficial": not r.get("imagem") and bool(foto_oficial(r.get("modelo") or "")),
             }
             for r in registros
         ]

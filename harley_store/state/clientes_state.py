@@ -9,6 +9,7 @@ from typing import Optional
 
 import reflex as rx
 
+from .. import email_clientes
 from .. import xano_client as xano
 from ..dependencias import em_uso, mensagem_em_uso
 from ..validacao import (
@@ -123,6 +124,8 @@ class ClientesState(rx.State):
         if self.form_id is None:
             await xano.criar(TABELA, dados)
             mensagem = f"Cliente “{nome}” cadastrado."
+            if dados["email"] and email_clientes.boas_vindas(nome, dados["email"]):
+                mensagem += " E-mail de boas-vindas enviado."
         else:
             await xano.atualizar(TABELA, self.form_id, dados)
             mensagem = f"Cliente “{nome}” atualizado."

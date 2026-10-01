@@ -19,19 +19,27 @@ Transações (Vendas), Ordens de Serviço e Itens de Ordem de Serviço.
   de hoje/do mês, gráfico de faturamento dos últimos 12 meses, produtos,
   estoque baixo, clientes, OS em aberto e um extrato recente (igual à
   view `vw_resumo_operacoes` do script original, só que calculada em Python).
-- **Motos da loja** (`/motos-loja`) — estoque de motos à venda, ligado à
-  tabela `motos` do Xano: marca, modelo, ano, cor, placa, chassi, km,
-  RENAVAM, cilindrada, localização, situação (Em estoque, Em preparação,
-  Em manutenção, Reservada, Consignada, Indisponível, Vendida), preços de
+- **Produtos** — catálogo e estoque, separado em **abas por categoria**
+  (com a quantidade de cada uma), aviso de estoque baixo (≤ 5 unidades),
+  busca e categorias sugeridas (Peças, Vestuário, Consumíveis, Acessórios,
+  Motores, Pneus, Lubrificantes, Outros). Uma categoria nova é só
+  digitada: não precisa mudar código. Ao escolher uma categoria, o
+  cadastro de produto novo já vem com ela preenchida.
+- **Produtos > aba Motos** (`/produtos?aba=motos`; o antigo `/motos-loja`
+  leva para lá) — o estoque de motos à venda, que antes era a página Motos
+  da loja. Na aba Motos o formulário vira o de moto, ligado à tabela
+  `motos` do Xano: marca, modelo, ano, cor, placa, chassi, km, RENAVAM,
+  cilindrada, localização, situação (Em estoque, Em preparação, Em
+  manutenção, Reservada, Consignada, Indisponível, Vendida), preços de
   compra e venda, datas de entrada/saída, cliente, observações e fotos
-  (principal + até 8 adicionais, com galeria ampliada). Só
-  "Vendida" tira a moto do estoque, e ela exige o cliente comprador.
-- **Produtos** — catálogo e estoque, com aviso de estoque baixo (≤ 5
-  unidades), busca, filtro por categoria e categorias sugeridas
-  (Motocicletas, Peças, Vestuário, Consumíveis, Acessórios, Motores,
-  Pneus, Lubrificantes, Outros). Uma categoria nova é só digitada: não
-  precisa mudar código.
+  (principal + até 8 adicionais, com galeria ampliada). Só "Vendida" tira
+  a moto do estoque, e ela exige o cliente comprador e o chassi. Moto sem
+  foto enviada mostra a **foto oficial** do modelo.
 - **Clientes** e **Motos dos clientes** — cadastro e vínculo cliente → moto.
+  As motos dos clientes mostram a foto oficial do modelo cadastrado.
+  Cliente cadastrado com e-mail recebe um **e-mail de boas-vindas**, e quem
+  compra uma moto da loja recebe um **e-mail de parabéns** (ver "E-mails
+  aos clientes (SendGrid)").
 - **Vendas / Balcão** — venda com **vários itens** (carrinho): produtos do
   estoque (preço já preenchido e editável, para descontos) e itens avulsos
   sem estoque (ex.: mão de obra). O estoque é baixado na hora, protegido
@@ -45,12 +53,14 @@ Transações (Vendas), Ordens de Serviço e Itens de Ordem de Serviço.
   (Aberta → Em andamento → Concluída/Cancelada). Excluir uma OS devolve
   as peças ao estoque.
 - **Compras** — dá entrada de mercadoria de um fornecedor com vários itens
-  de uma vez; cada item já soma no estoque do produto correspondente.
+  de uma vez; cada item já soma no estoque do produto correspondente. A
+  coluna **Descrição** mostra o que foi pedido ao fornecedor: começa com os
+  itens da compra e pode ser reescrita pelo lápis ao lado.
   Excluir uma compra retira do estoque o que ela somou (e é recusado se
   esses produtos já foram vendidos).
 - **Fornecedores** e **Funcionários** — cadastros de apoio.
 - **Impressão de documentos** — botão **Imprimir** em Vendas, Ordens de
-  serviço, Compras e Motos da loja. Abre em nova aba uma folha A4
+  serviço, Compras e Produtos > Motos. Abre em nova aba uma folha A4
   (comprovante de venda, ordem de serviço, entrada de mercadoria, recibo de
   compra e venda ou ficha da moto) com cliente/fornecedor, itens, total e
   assinaturas; imprime ou salva em PDF pelo navegador.
@@ -342,6 +352,18 @@ Sem esse arquivo o app não consegue ler nem gravar nada (o log mostra
 copie o `.env` de uma pasta existente. **Não exclua** a conta "Sistema
 Harley Store" na tela de usuários.
 
+Se todas as telas mostrarem "Você não tem permissão para esta operação" e
+listas vazias, o Xano está recusando a conta de serviço (senha trocada ou
+conta excluída). Para reparar, rode e entre com uma conta de administrador:
+
+```powershell
+.venv\Scripts\python.exe scripts\reparar_conta_servico.py
+```
+
+Ele gera uma senha nova para a conta de serviço (ou a recria), grava no
+Xano e no `.env` (e, se você confirmar, no `C:\HARLEY_PROD\.env`) e testa a
+leitura dos dados. Depois, reinicie o app.
+
 As definições do Xano (tabelas e endpoints) ficam espelhadas na pasta
 `xano\`. Para aplicar mudanças feitas nela:
 
@@ -371,6 +393,40 @@ observa as mensagens do websocket do Reflex, e o visual fica em
   aparecendo.
 - Motos da loja: uma foto principal e até 8 adicionais; qualquer adicional
   pode virar a principal. O botão de ampliar no cartão abre a galeria.
+- **Fotos oficiais**: em `assets/motos/` ficam as fotos de fábrica (site
+  harley-davidson.com) de 10 modelos: Iron 883, Fat Boy 114, Heritage
+  Classic, Sportster S, Pan America 1250 Special, Street Glide Special,
+  Road Glide Limited, Low Rider S, Breakout 117 e Nightster Special. Moto da
+  loja ou de cliente sem foto enviada mostra a oficial, escolhida pelo
+  **nome do modelo cadastrado** (modelo não reconhecido fica sem foto, nada
+  é inventado). Para incluir outro modelo: salve a foto em `assets/motos/`
+  e acrescente uma linha em `harley_store/fotos_oficiais.py`. Elas não
+  ocupam o armazenamento do Xano.
+- Para cadastrar no estoque da loja os modelos acima que ainda não estão lá,
+  rode uma vez `.venv\Scripts\python.exe scripts\cadastrar_motos_catalogo.py`
+  (mostra a prévia e pede confirmação). Eles entram como unidades 0 km,
+  **sem placa e sem chassi**: as placas e chassis da lista original são das
+  motos dos clientes, e repeti-los faria a mesma moto existir duas vezes.
+  Chassi, ano, cor e preços são preenchidos quando a unidade chegar.
+
+## E-mails aos clientes (SendGrid)
+
+O app envia, pelo [SendGrid](https://sendgrid.com), um e-mail de
+**boas-vindas** quando um cliente com e-mail é cadastrado e um de
+**parabéns pela compra** quando uma moto da loja é marcada como Vendida para
+um cliente com e-mail. O envio sai direto do servidor do app (não usa o
+Xano), em segundo plano: uma falha só aparece no log e nunca desfaz o
+cadastro ou a venda. Para ligar, acrescente ao `.env` de cada pasta (produção
+e desenvolvimento):
+
+    SENDGRID_API_KEY=SG.xxxxxxxx
+    SENDGRID_REMETENTE=contato@sualoja.com.br
+    SENDGRID_REMETENTE_NOME=Harley Store
+
+A chave é criada no SendGrid em *Settings > API Keys* (permissão "Mail
+Send"), e o remetente precisa estar verificado em *Settings > Sender
+Authentication*. Sem essas linhas, nenhum e-mail é enviado e o app funciona
+normalmente. Os textos ficam em `harley_store/email_clientes.py`.
 - Aceitos: PNG, JPG e WEBP (produtos e motos de clientes também GIF), até
   5 MB; o conteúdo do arquivo é conferido, não só a extensão.
 - Ao excluir uma moto, a foto continua guardada no Xano (o plano não

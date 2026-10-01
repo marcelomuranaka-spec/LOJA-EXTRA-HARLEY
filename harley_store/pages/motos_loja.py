@@ -1,9 +1,14 @@
+"""
+Motos da loja (estoque de motos à venda): formulário, cartões e galeria.
+Não é mais uma página própria: aparece na aba "Motos" de Produtos
+(pages/produtos.py), que chama `secao_motos()` e `dialogo_foto_moto()`.
+"""
+
 import reflex as rx
 
 from ..components.botao_imprimir import botao_imprimir
 from ..components.confirm_dialog import confirm_delete_button
 from ..components.formulario import mensagem_erro
-from ..components.layout import page
 from ..components.tema import BORDA, LARANJA, PRETO_CARTAO
 from ..state.motos_loja_state import MotosLojaState
 
@@ -31,7 +36,8 @@ def _badge_status(status: rx.Var) -> rx.Component:
     )
 
 
-def _foto(url: rx.Var, altura: str, descricao: rx.Var | str = "Foto da moto") -> rx.Component:
+def _foto(url: rx.Var, altura: str, descricao: rx.Var | str = "Foto da moto",
+          oficial: rx.Var | bool = False) -> rx.Component:
     return rx.cond(
         url != "",
         rx.image(
@@ -40,9 +46,11 @@ def _foto(url: rx.Var, altura: str, descricao: rx.Var | str = "Foto da moto") ->
             loading="lazy",
             width="100%",
             height=altura,
-            object_fit="cover",
+            # foto oficial (perfil de fábrica em fundo branco) aparece inteira
+            object_fit=rx.cond(oficial, "contain", "cover"),
             # fundo neutro com ícone se a imagem não carregar (link quebrado, sem internet)
-            background=rx.color("gray", 3),
+            background=rx.cond(oficial, "white", rx.color("gray", 3)),
+            title=rx.cond(oficial, "Foto oficial do modelo (Harley-Davidson)", ""),
         ),
         rx.center(
             rx.icon("bike", size=40, color=rx.color("gray", 8)),
@@ -56,7 +64,7 @@ def _foto(url: rx.Var, altura: str, descricao: rx.Var | str = "Foto da moto") ->
 def _cartao_moto(row: dict) -> rx.Component:
     return rx.box(
         rx.box(
-            _foto(row["foto_url"], "170px", row["modelo"]),
+            _foto(row["foto_url"], "170px", row["modelo"], row["foto_oficial"]),
             rx.box(_badge_status(row["status"]), position="absolute", top="0.6rem", left="0.6rem"),
             rx.cond(
                 row["fotos_urls"].to(list[str]).length() > 1,
@@ -162,7 +170,10 @@ def _campo_foto() -> rx.Component:
     return rx.vstack(
         rx.text("Foto da moto", size="1", weight="bold", color=rx.color("gray", 10)),
         rx.hstack(
-            rx.box(_foto(MotosLojaState.foto_url, "110px"), width="160px", border_radius="0.6rem", overflow="hidden"),
+            rx.box(
+                _foto(MotosLojaState.foto_previa, "110px", oficial=MotosLojaState.foto_url == ""),
+                width="160px", border_radius="0.6rem", overflow="hidden",
+            ),
             rx.vstack(
                 rx.upload(
                     rx.hstack(
@@ -270,7 +281,7 @@ def _formulario() -> rx.Component:
                 _input("Ano", MotosLojaState.ano, MotosLojaState.set_ano, "2026", "number"),
                 _input("Cor", MotosLojaState.cor, MotosLojaState.set_cor, "Vivid Black"),
                 _input("Placa (se houver)", MotosLojaState.placa, MotosLojaState.set_placa, "ABC1D23"),
-                _input("Chassi *", MotosLojaState.chassi, MotosLojaState.set_chassi),
+                _input("Chassi (obrigatório na venda)", MotosLojaState.chassi, MotosLojaState.set_chassi),
                 _input("Quilometragem", MotosLojaState.quilometragem, MotosLojaState.set_quilometragem, "0", "number"),
                 _rotulado(
                     "Situação *",
@@ -354,7 +365,7 @@ def _formulario() -> rx.Component:
     )
 
 
-def _dialogo_foto() -> rx.Component:
+def dialogo_foto_moto() -> rx.Component:
     """Foto em tamanho grande, aberta pelo botão de ampliar do cartão."""
     return rx.dialog.root(
         rx.dialog.content(
@@ -396,8 +407,9 @@ def _dialogo_foto() -> rx.Component:
     )
 
 
-def motos_loja_page() -> rx.Component:
-    return page(
+def secao_motos() -> rx.Component:
+    """Aba "Motos" de Produtos: cadastro + busca + cartões das motos da loja."""
+    return rx.vstack(
         _formulario(),
         rx.hstack(
             rx.input(
@@ -432,7 +444,7 @@ def motos_loja_page() -> rx.Component:
                 width="100%",
             ),
         ),
-        _dialogo_foto(),
-        title="Motos da loja",
-        subtitle="Estoque de motos à venda — cadastro sincronizado com a tabela motos do Xano.",
+        align="start",
+        width="100%",
+        spacing="4",
     )

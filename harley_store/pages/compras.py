@@ -30,6 +30,22 @@ def _linha_historico(row: dict) -> rx.Component:
         rx.table.cell(row["data_entrada"]),
         rx.table.cell(row["fornecedor_nome"]),
         rx.table.cell(row["qtd_itens"]),
+        rx.table.cell(
+            rx.hstack(
+                rx.text(row["descricao"], size="2", color=rx.color("gray", 11)),
+                rx.icon_button(
+                    rx.icon("pencil", size=12),
+                    size="1",
+                    variant="ghost",
+                    title="Editar descrição",
+                    aria_label="Editar descrição",
+                    on_click=ComprasState.editar_descricao(row["id"], row["descricao"]),
+                ),
+                spacing="2",
+                align="start",
+            ),
+            max_width="360px",
+        ),
         rx.table.cell(rx.text("R$ ", row["valor_total"])),
         rx.table.cell(
             rx.hstack(
@@ -41,6 +57,38 @@ def _linha_historico(row: dict) -> rx.Component:
                 spacing="2",
             )
         ),
+    )
+
+
+def _dialogo_descricao() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(rx.text("Descrição da compra nº ", ComprasState.descricao_compra_id)),
+            rx.dialog.description(
+                "O que foi pedido ao fornecedor. Começa preenchida com os itens da compra; ajuste como preferir.",
+                size="2",
+                color=rx.color("gray", 10),
+            ),
+            rx.text_area(
+                value=ComprasState.descricao_texto,
+                on_change=ComprasState.set_descricao_texto,
+                rows="5",
+                max_length=500,
+                width="100%",
+                margin_top="0.75rem",
+            ),
+            mensagem_erro(ComprasState.erro_descricao),
+            rx.flex(
+                rx.dialog.close(rx.button("Cancelar", variant="soft", color_scheme="gray")),
+                rx.button(rx.icon("check", size=16), "Salvar", on_click=ComprasState.salvar_descricao),
+                justify="end",
+                gap="3",
+                padding_top="0.75rem",
+            ),
+            max_width="min(560px, 95vw)",
+        ),
+        open=ComprasState.descricao_compra_id != "",
+        on_open_change=ComprasState.fechar_descricao,
     )
 
 
@@ -145,6 +193,7 @@ def compras_page() -> rx.Component:
                     rx.table.column_header_cell("Data"),
                     rx.table.column_header_cell("Fornecedor"),
                     rx.table.column_header_cell("Itens"),
+                    rx.table.column_header_cell("Descrição"),
                     rx.table.column_header_cell("Valor total"),
                     rx.table.column_header_cell("Ações"),
                 )
@@ -153,6 +202,7 @@ def compras_page() -> rx.Component:
             width="100%",
             variant="surface",
         ),
+        _dialogo_descricao(),
         title="Compras",
         subtitle="Entrada de mercadoria dos fornecedores — dá baixa automática no estoque.",
     )

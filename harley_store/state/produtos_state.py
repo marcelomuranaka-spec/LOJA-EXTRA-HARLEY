@@ -4,6 +4,11 @@ Categoria é um texto livre no Xano: a tela sugere as categorias padrão
 (CATEGORIAS_PADRAO) e as que já existem nos produtos, e aceita uma nova
 digitada, sem precisar mudar código para criar categoria.
 
+A tela mostra as categorias como abas (com a quantidade de produtos de
+cada uma) e uma aba "Motos", que é o estoque de motos da loja (tabela
+`motos`, state/motos_loja_state.py). Na aba Motos, o formulário e a lista
+viram os de moto; nas demais, os de produto. Link direto: /produtos?aba=motos.
+
 Saldo de estoque: a edição manda a VARIAÇÃO digitada pelo funcionário para
 `estoque.atualizar_produto`, que a aplica sobre o saldo atual sob a mesma
 trava das vendas (ver estoque.py).
@@ -26,11 +31,14 @@ TABELA = "produtos"
 
 LIMITE_ESTOQUE_BAIXO = 5
 
+# Sem "Motocicletas": motos ficam na aba Motos (tabela própria, com placa,
+# chassi, situação...), não como produto.
 CATEGORIAS_PADRAO = [
-    "Motocicletas", "Peças", "Vestuário", "Consumíveis", "Acessórios",
+    "Peças", "Vestuário", "Consumíveis", "Acessórios",
     "Motores", "Pneus", "Lubrificantes", "Outros",
 ]
 TODAS = "Todas"
+MOTOS = "Motos"
 
 ORIGENS_HISTORICO = {
     "VENDA": "Venda", "CANCELAMENTO_VENDA": "Venda cancelada", "OS": "Ordem de serviço",
@@ -53,6 +61,9 @@ def _apagar_foto_local(nome_arquivo: str) -> None:
 class ProdutosState(rx.State):
     produtos: list[dict] = []
     categorias: list[str] = []
+    # abas: [{"nome": "Peças", "qtd": "12"}, ...] (só categorias com produto, mais as padrão)
+    abas_categoria: list[dict] = []
+    total_produtos: int = 0
     busca: str = ""
     filtro_categoria: str = TODAS
     somente_estoque_baixo: bool = False
@@ -75,10 +86,22 @@ class ProdutosState(rx.State):
 
     _estoque_lido: int = 0      # saldo quando a edição foi aberta
     _imagem_lida: str = ""      # foto quando a edição foi aberta
+    _categoria_lida: str = ""   # categoria quando a edição foi aberta
 
     @rx.var
-    def filtros_categoria(self) -> list[str]:
-        return [TODAS, *self.categorias]
+    def aba_motos(self) -> bool:
+        return self.filtro_categoria == MOTOS
+
+    @rx.event
+    async def abrir(self):
+        """on_load da página: /produtos?aba=motos abre direto na aba Motos."""
+        aba = (self.router.page.params.get("aba") or "").strip().lower()
+        if aba == MOTOS.lower():
+            self.filtro_categoria = MOTOS
+        elif self.filtro_categoria == MOTOS:
+            # "Produtos" no menu abre os produtos, mesmo que a última aba vista tenha sido Motos
+            self.filtro_categoria = TODAS
+        await self.carregar()
 
     @rx.event
     async def carregar(self):
@@ -87,6 +110,17 @@ class ProdutosState(rx.State):
             {*CATEGORIAS_PADRAO, *((r.get("categoria") or "").strip() for r in todos)} - {""},
             key=str.lower,
         )
+        contagem: dict[str, int] = {}
+        for r in todos:
+            nome = (r.get("categoria") or "").strip()
+            if nome:
+                contagem[nome] = contagem.get(nome, 0) + 1
+        self.abas_categoria = [
+            {"nome": c, "qtd": str(contagem.get(c, 0))} for c in self.categorias if c.lower() != MOTOS.lower()
+        ]
+        self.total_produtos = len(todos)
+        if self.filtro_categoria not in (TODAS, MOTOS, *self.categorias):
+            self.filtro_categoria = TODAS
         registros = todos
         if self.busca.strip():
             termo = self.busca.strip().lower()
@@ -94,7 +128,7 @@ class ProdutosState(rx.State):
                 r for r in registros
                 if termo in (r.get("nome_produto") or "").lower() or termo in (r.get("descricao") or "").lower()
             ]
-        if self.filtro_categoria != TODAS:
+        if self.filtro_categoria not in (TODAS, MOTOS):
             registros = [r for r in registros if (r.get("categoria") or "") == self.filtro_categoria]
         if self.somente_estoque_baixo:
             registros = [r for r in registros if (r.get("estoque_qtd") or 0) <= LIMITE_ESTOQUE_BAIXO]
@@ -124,6 +158,8 @@ class ProdutosState(rx.State):
     @rx.event
     async def definir_filtro_categoria(self, valor: str):
         self.filtro_categoria = valor
+        if not self.form_id:
+            self.novo()  # novo produto já sai com a categoria da aba
         await self.carregar()
 
     @rx.event
@@ -181,6 +217,9 @@ class ProdutosState(rx.State):
         self.erro_form = ""
         self._estoque_lido = 0
         self._imagem_lida = ""
+        self._categoria_lida = ""
+        if self.filtro_categoria not in (TODAS, MOTOS):
+            self.categoria = self.filtro_categoria
 
     @rx.event
     async def editar(self, row: dict):
@@ -193,7 +232,7 @@ class ProdutosState(rx.State):
         self.form_id = int(registro["id"])
         self.nome_produto = registro.get("nome_produto") or ""
         self.descricao = registro.get("descricao") or ""
-        self.categoria = registro.get("categoria") or ""
+        self.categoria = self._categoria_lida = registro.get("categoria") or ""
         self._estoque_lido = int(registro.get("estoque_qtd") or 0)
         self.estoque_qtd = str(self._estoque_lido)
         self.preco_venda = f"{float(registro.get('preco_venda') or 0):.2f}"
@@ -259,6 +298,11 @@ class ProdutosState(rx.State):
             return
         if preco > 10_000_000:
             self.erro_form = "Preço acima do limite permitido. Confira o valor digitado."
+            return
+        # (produto antigo que já estava numa categoria assim continua editável)
+        if (categoria.lower() in ("moto", "motos", "motocicleta", "motocicletas")
+                and categoria.lower() != self._categoria_lida.lower()):
+            self.erro_form = "Motos são cadastradas na aba Motos (com placa, chassi e situação), não como produto."
             return
         # categoria já existente com outra grafia (ex.: "peças" x "Peças")
         categoria = next((c for c in self.categorias if c.lower() == categoria.lower()), categoria)

@@ -8,18 +8,23 @@ from ..state.motos_state import MotosState
 
 def _miniatura(row: dict) -> rx.Component:
     return rx.cond(
-        row["imagem"] != "",
+        row["imagem_url"] != "",
         rx.image(
             src=row["imagem_url"],
-            width="42px",
-            height="42px",
+            alt=row["modelo"],
+            loading="lazy",
+            width="96px",
+            height="58px",
             border_radius="0.4rem",
-            object_fit="cover",
+            # foto oficial (perfil em fundo branco) aparece inteira; foto da loja preenche
+            object_fit=rx.cond(row["foto_oficial"], "contain", "cover"),
+            background="white",
+            title=rx.cond(row["foto_oficial"], "Foto oficial do modelo (Harley-Davidson)", "Foto da moto"),
         ),
         rx.box(
             rx.icon("bike", size=18, color=rx.color("gray", 8)),
-            width="42px",
-            height="42px",
+            width="96px",
+            height="58px",
             border_radius="0.4rem",
             background=rx.color("gray", 3),
             display="flex",

@@ -10,6 +10,9 @@ table entrada_mercadoria {
   
     timestamp data_entrada?=now
     decimal valor_total?
+  
+    // Descrição dos itens pedidos ao fornecedor (editável na tela Compras)
+    text descricao? filters=trim
   }
 
   index = [{type: "primary", field: [{name: "id"}]}]

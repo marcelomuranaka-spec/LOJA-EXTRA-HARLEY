@@ -12,7 +12,6 @@ from .tema import BORDA, LARANJA, LARANJA_SUAVE, LOGO, PRETO, PRETO_CARTAO
 
 MENU_ITEMS = [
     ("/painel", "layout-dashboard", "Painel"),
-    ("/motos-loja", "bike", "Motos da loja"),
     ("/produtos", "package", "Produtos"),
     ("/clientes", "users", "Clientes"),
     ("/motos", "key-round", "Motos dos clientes"),

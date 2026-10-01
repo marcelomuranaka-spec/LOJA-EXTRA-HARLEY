@@ -24,7 +24,6 @@ from .pages.impressao import impressao_page
 from .pages.inicio import inicio_page
 from .pages.login import login_page
 from .pages.motos import motos_page
-from .pages.motos_loja import motos_loja_page
 from .pages.ordens_servico import ordens_servico_page
 from .pages.produtos import produtos_page
 from .pages.usuarios import usuarios_page
@@ -104,16 +103,18 @@ app.add_page(
     on_load=[AuthState.exigir_login, DashboardState.carregar],
 )
 app.add_page(
-    motos_loja_page,
-    route="/motos-loja",
-    title="Motos da loja — Harley Store",
-    on_load=[AuthState.exigir_login, MotosLojaState.carregar, MotosLojaState.novo],
-)
-app.add_page(
     produtos_page,
     route="/produtos",
     title="Produtos — Harley Store",
-    on_load=[AuthState.exigir_login, ProdutosState.carregar],
+    # a aba Motos (estoque de motos da loja) faz parte desta página
+    on_load=[AuthState.exigir_login, ProdutosState.abrir, MotosLojaState.carregar, MotosLojaState.novo],
+)
+# Endereço antigo da página Motos da loja (favoritos, links salvos): vai para a aba Motos.
+app.add_page(
+    rx.fragment,
+    route="/motos-loja",
+    title="Produtos — Harley Store",
+    on_load=rx.redirect("/produtos?aba=motos"),
 )
 app.add_page(
     clientes_page,

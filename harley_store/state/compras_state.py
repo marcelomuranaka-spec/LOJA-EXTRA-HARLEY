@@ -10,6 +10,11 @@ cabeçalho (EntradaMercadoria) e uma linha (ItemCompraEstoque) por item. Se
 algo falhar no meio, o que foi feito é desfeito. Excluir uma compra retira
 do estoque o que ela tinha somado.
 
+Cada compra tem uma descrição (campo `descricao` de entrada_mercadoria): ao
+finalizar, ela é montada a partir dos itens ("2x Pneu..., 10x Óleo...") e
+depois pode ser reescrita pela equipe na lista de compras. Compras antigas,
+sem descrição gravada, mostram a descrição montada pelos itens.
+
 Dados vêm do backend Xano.
 """
 
@@ -29,6 +34,12 @@ TABELA_ENTRADA = "entrada_mercadoria"
 TABELA_ITENS = "itens_compra_estoque"
 TABELA_FORNECEDORES = "fornecedores"
 TABELA_PRODUTOS = "produtos"
+MAX_DESCRICAO = 500
+
+
+def descricao_dos_itens(itens: list[tuple[str, int]]) -> str:
+    """[(nome do produto, quantidade)] -> "2x Pneu Traseiro; 10x Óleo 10W30"."""
+    return "; ".join(f"{qtd}x {nome}" for nome, qtd in itens)
 
 
 class ComprasState(rx.State):
@@ -45,6 +56,11 @@ class ComprasState(rx.State):
     item_valor_unitario: str = "0.00"
 
     erro_compra: str = ""
+
+    # edição da descrição de uma compra já registrada (diálogo)
+    descricao_compra_id: str = ""
+    descricao_texto: str = ""
+    erro_descricao: str = ""
 
     @rx.var
     def total_atual(self) -> str:
@@ -69,11 +85,13 @@ class ComprasState(rx.State):
             self.item_produto_selecionado = self.produtos_opcoes[0] if self.produtos_opcoes else ""
 
         nomes_fornecedor = {f["id"]: f["nome_fornecedor"] for f in fornecedores}
+        nomes_produto = {p["id"]: p.get("nome_produto") or f"produto {p['id']}" for p in produtos}
 
         entradas = sorted(entradas_todas, key=lambda e: e.get("data_entrada") or 0, reverse=True)[:30]
-        qtd_itens_por_entrada: dict[int, int] = {}
+        itens_por_entrada: dict[int, list[tuple[str, int]]] = {}
         for item in itens:
-            qtd_itens_por_entrada[item["id_entrada"]] = qtd_itens_por_entrada.get(item["id_entrada"], 0) + 1
+            nome = nomes_produto.get(item.get("id_produto"), "(produto excluído)")
+            itens_por_entrada.setdefault(item["id_entrada"], []).append((nome, int(item.get("quantidade") or 0)))
 
         self.historico = [
             {
@@ -81,7 +99,10 @@ class ComprasState(rx.State):
                 "data_entrada": xano.epoch_ms_para_datetime(e["data_entrada"]).strftime("%d/%m/%Y %H:%M"),
                 "fornecedor_nome": nomes_fornecedor.get(e["id_fornecedor"], "—"),
                 "valor_total": f"{float(e.get('valor_total') or 0):.2f}",
-                "qtd_itens": str(qtd_itens_por_entrada.get(e["id"], 0)),
+                "qtd_itens": str(len(itens_por_entrada.get(e["id"], []))),
+                # gravada pela equipe; sem ela, montada pelos itens da compra
+                "descricao": (e.get("descricao") or "").strip()
+                or descricao_dos_itens(itens_por_entrada.get(e["id"], [])) or "—",
             }
             for e in entradas
         ]
@@ -156,6 +177,9 @@ class ComprasState(rx.State):
                 "id_fornecedor": id_fornecedor,
                 "data_entrada": xano.datetime_para_epoch_ms(),
                 "valor_total": total,
+                "descricao": descricao_dos_itens(
+                    [(item["produto_nome"], int(item["quantidade"])) for item in self.itens_atual]
+                )[:MAX_DESCRICAO],
             })
             for item in self.itens_atual:
                 gravado = await xano.criar(TABELA_ITENS, {
@@ -192,6 +216,42 @@ class ComprasState(rx.State):
         self.itens_atual = []
         await self.carregar()
         return rx.toast.success(f"Compra nº {entrada['id']} registrada; estoque atualizado.")
+
+    @rx.event
+    def editar_descricao(self, entrada_id: str, descricao: str):
+        self.descricao_compra_id = entrada_id
+        self.descricao_texto = "" if descricao == "—" else descricao
+        self.erro_descricao = ""
+
+    @rx.event
+    def fechar_descricao(self, aberto: bool = False):
+        if not aberto:
+            self.descricao_compra_id = ""
+
+    @rx.event
+    async def salvar_descricao(self):
+        texto = " ".join(self.descricao_texto.split())
+        if len(texto) > MAX_DESCRICAO:
+            self.erro_descricao = f"A descrição pode ter no máximo {MAX_DESCRICAO} caracteres."
+            return
+        entrada_id = int(self.descricao_compra_id)
+        registro = await xano.buscar_direto(TABELA_ENTRADA, entrada_id)
+        if registro is None:
+            self.descricao_compra_id = ""
+            await self.carregar()
+            return rx.toast.error("Essa compra não existe mais (foi excluída por outra pessoa).")
+        # PATCH do Xano exige o registro completo
+        dados = {k: v for k, v in registro.items() if k != "id"}
+        dados["descricao"] = texto or None
+        gravado = await xano.atualizar(TABELA_ENTRADA, entrada_id, dados)
+        if "descricao" not in gravado:
+            log.error("entrada_mercadoria sem o campo descricao no Xano")
+            self.erro_descricao = ("O banco ainda não tem o campo de descrição. "
+                                   "Rode scripts/aplicar_xano.ps1 e tente de novo.")
+            return
+        self.descricao_compra_id = ""
+        await self.carregar()
+        return rx.toast.success(f"Descrição da compra nº {entrada_id} atualizada.")
 
     @rx.event
     async def excluir_entrada(self, entrada_id: str):

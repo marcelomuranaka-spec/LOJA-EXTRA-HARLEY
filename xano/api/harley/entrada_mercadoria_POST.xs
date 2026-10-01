@@ -16,6 +16,7 @@ query entrada_mercadoria verb=POST {
         id_fornecedor: $input.id_fornecedor
         data_entrada : $input.data_entrada
         valor_total  : $input.valor_total
+        descricao    : $input.descricao
       }
     } as $model
   }

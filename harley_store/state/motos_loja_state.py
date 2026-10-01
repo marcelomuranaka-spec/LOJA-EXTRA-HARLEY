@@ -1,5 +1,6 @@
 """
 State de Motos da Loja (estoque de motos à venda) — tabela `motos` do Xano.
+A tela fica na aba "Motos" de Produtos (pages/produtos.py).
 
 Não confundir com `motos_state.py` (motos dos CLIENTES, que passam pela
 oficina). Aqui ficam as motos que a loja compra e revende.
@@ -13,6 +14,11 @@ Dois cuidados específicos desta tabela no Xano:
 - `foto` é um campo de imagem do Xano (objeto com path/url), não um nome
   de arquivo local. Foto nova passa por `xano.enviar_imagem`.
 - Datas (`data_entrada`/`data_saida`) são epoch em ms; 0 = sem data.
+
+Moto sem foto enviada mostra a foto oficial do modelo (fotos_oficiais.py).
+O chassi pode ficar vazio enquanto a unidade não chegou, mas é exigido para
+marcar a moto como Vendida (vai no recibo). Ao vender para um cliente com
+e-mail, ele recebe um e-mail de parabéns (email_clientes.py).
 """
 
 import asyncio
@@ -23,7 +29,9 @@ from typing import Optional
 
 import reflex as rx
 
+from .. import email_clientes
 from .. import xano_client as xano
+from ..fotos_oficiais import foto_oficial
 from ..validacao import inteiro, numero, validar_imagem
 
 log = logging.getLogger("harley_store.motos_loja")
@@ -64,8 +72,42 @@ def _input_para_epoch(texto: str) -> int:
     return xano.datetime_para_epoch_ms(datetime.datetime.strptime(texto, "%Y-%m-%d"))
 
 
+def _linha_moto(r: dict, nomes_por_id: dict) -> dict:
+    """Registro da tabela motos -> linha (cartão) da tela."""
+    enviada = ((r.get("foto") or {}).get("url")) or ""
+    oficial = foto_oficial(r.get("modelo") or "")
+    principal = enviada or oficial
+    return {
+        "id": str(r["id"]),
+        "marca": r.get("marca") or "",
+        "modelo": r.get("modelo") or "",
+        "ano": str(r.get("ano") or ""),
+        "cor": r.get("cor") or "",
+        "placa": r.get("placa") or "",
+        "chassi": r.get("chassi") or "",
+        "quilometragem": str(r.get("quilometragem") or 0),
+        "status": r.get("status") or "Em estoque",
+        "preco_compra": _moeda(r.get("preco_compra") or 0),
+        "preco_venda": _moeda(r.get("preco_venda") or 0),
+        "data_entrada": _data_para_input(r.get("data_entrada")),
+        "data_saida": _data_para_input(r.get("data_saida")),
+        "observacoes": r.get("observacoes") or "",
+        "id_cliente": str(r.get("cliente_id") or 0),
+        "cliente_nome": nomes_por_id.get(r.get("cliente_id"), ""),
+        # foto enviada pela loja; sem ela, a foto oficial do modelo
+        "foto_url": principal,
+        "foto_oficial": not enviada and bool(oficial),
+        "fotos_urls": [u for u in [principal]
+                       + [(f or {}).get("url") or "" for f in (r.get("fotos") or []) if isinstance(f, dict)] if u],
+        "renavam": r.get("renavam") or "",
+        "cilindrada": str(r.get("cilindrada") or ""),
+        "localizacao": r.get("localizacao") or "",
+    }
+
+
 class MotosLojaState(rx.State):
     motos: list[dict] = []
+    total_motos: int = 0  # todas as motos cadastradas (contador da aba Motos)
     busca: str = ""
     filtro_status: str = "Todos"
 
@@ -99,6 +141,9 @@ class MotosLojaState(rx.State):
     _foto: dict = {}
 
     erro_form: str = ""
+    # situação e cliente quando a edição foi aberta (para saber se a venda é nova)
+    _status_lido: str = ""
+    _cliente_lido: int = 0
     # foto aberta em tamanho grande (diálogo); "" = fechado
     foto_ampliada: str = ""
     foto_ampliada_titulo: str = ""
@@ -116,12 +161,18 @@ class MotosLojaState(rx.State):
     def filtros_status(self) -> list[str]:
         return ["Todos", *STATUS_OPCOES]
 
+    @rx.var
+    def foto_previa(self) -> str:
+        """Foto mostrada no formulário: a enviada ou, sem ela, a oficial do modelo digitado."""
+        return self.foto_url or foto_oficial(self.modelo)
+
     @rx.event
     async def carregar(self):
         clientes, registros = await asyncio.gather(xano.listar(TABELA_CLIENTES), xano.listar(TABELA))
         clientes.sort(key=lambda c: c["nome_cliente"])
         self.clientes_opcoes = [SEM_CLIENTE, *[f"{c['id']} - {c['nome_cliente']}" for c in clientes]]
         nomes_por_id = {c["id"]: c["nome_cliente"] for c in clientes}
+        self.total_motos = len(registros)
 
         if self.busca.strip():
             termo = self.busca.strip().lower()
@@ -134,33 +185,8 @@ class MotosLojaState(rx.State):
             registros = [r for r in registros if r.get("status") == self.filtro_status]
         registros.sort(key=lambda r: ((r.get("marca") or "").lower(), (r.get("modelo") or "").lower(), r.get("ano") or 0))
 
-        self.motos = [
-            {
-                "id": str(r["id"]),
-                "marca": r.get("marca") or "",
-                "modelo": r.get("modelo") or "",
-                "ano": str(r.get("ano") or ""),
-                "cor": r.get("cor") or "",
-                "placa": r.get("placa") or "",
-                "chassi": r.get("chassi") or "",
-                "quilometragem": str(r.get("quilometragem") or 0),
-                "status": r.get("status") or "Em estoque",
-                "preco_compra": _moeda(r.get("preco_compra") or 0),
-                "preco_venda": _moeda(r.get("preco_venda") or 0),
-                "data_entrada": _data_para_input(r.get("data_entrada")),
-                "data_saida": _data_para_input(r.get("data_saida")),
-                "observacoes": r.get("observacoes") or "",
-                "id_cliente": str(r.get("cliente_id") or 0),
-                "cliente_nome": nomes_por_id.get(r.get("cliente_id"), ""),
-                "foto_url": ((r.get("foto") or {}).get("url")) or "",
-                "fotos_urls": [u for u in [((r.get("foto") or {}).get("url")) or ""]
-                               + [(f or {}).get("url") or "" for f in (r.get("fotos") or []) if isinstance(f, dict)] if u],
-                "renavam": r.get("renavam") or "",
-                "cilindrada": str(r.get("cilindrada") or ""),
-                "localizacao": r.get("localizacao") or "",
-            }
-            for r in registros
-        ]
+        self.motos = [_linha_moto(r, nomes_por_id) for r in registros]
+
 
     @rx.event
     async def definir_busca(self, valor: str):
@@ -223,6 +249,8 @@ class MotosLojaState(rx.State):
         self.renavam = ""
         self.cilindrada = ""
         self.localizacao = "Showroom"
+        self._status_lido = ""
+        self._cliente_lido = 0
 
     @rx.event
     async def editar(self, moto_id: str):
@@ -257,6 +285,8 @@ class MotosLojaState(rx.State):
         self.renavam = registro.get("renavam") or ""
         self.cilindrada = str(registro.get("cilindrada") or "")
         self.localizacao = registro.get("localizacao") or ""
+        self._status_lido = self.status
+        self._cliente_lido = int(cliente_id or 0)
         self.erro_foto = ""
         return rx.scroll_to("form-moto-loja")
 
@@ -349,13 +379,16 @@ class MotosLojaState(rx.State):
     def _validar(self) -> str:
         if self.status not in STATUS_OPCOES:
             return "Escolha uma situação válida."
-        if not self.marca.strip() or not self.modelo.strip() or not self.chassi.strip():
-            return "Preencha marca, modelo e chassi."
+        if not self.marca.strip() or not self.modelo.strip():
+            return "Preencha marca e modelo."
         placa = re.sub(r"[^A-Z0-9]", "", self.placa.upper())
         if placa and not _PLACA.match(placa):
             return "Placa inválida. Use o formato ABC1234 ou Mercosul ABC1D23 (ou deixe vazio se a moto não tem placa)."
-        if not re.fullmatch(r"[A-Z0-9]{6,17}", re.sub(r"\s", "", self.chassi).upper()):
+        chassi = re.sub(r"\s", "", self.chassi).upper()
+        if chassi and not re.fullmatch(r"[A-Z0-9]{6,17}", chassi):
             return "Chassi inválido: use só letras e números (até 17 caracteres)."
+        if self.status == "Vendida" and not chassi:
+            return "Para marcar como Vendida, informe o chassi (ele aparece no recibo)."
         try:
             ano = inteiro(self.ano)
             km = inteiro(self.quilometragem)
@@ -402,7 +435,7 @@ class MotosLojaState(rx.State):
         duplicado = next(
             (r for r in await xano.listar(TABELA)
              if ((placa and re.sub(r"[^A-Z0-9]", "", (r.get("placa") or "").upper()) == placa)
-                 or (r.get("chassi") or "").upper() == chassi)
+                 or (chassi and (r.get("chassi") or "").upper() == chassi))
              and r["id"] != self.form_id),
             None,
         )
@@ -444,6 +477,15 @@ class MotosLojaState(rx.State):
         else:
             await xano.atualizar(TABELA, self.form_id, dados)
             mensagem = f"Moto “{modelo}” atualizada."
+
+        # venda nova (não a mesma venda salva de novo): e-mail de parabéns ao comprador
+        venda_nova = self.status == "Vendida" and (self._status_lido != "Vendida" or self._cliente_lido != cliente_id)
+        if venda_nova and cliente_id:
+            comprador = await xano.buscar(TABELA_CLIENTES, cliente_id)
+            moto = " ".join(p for p in (dados["marca"], modelo, str(ano or ""), dados["cor"]) if p)
+            if comprador and comprador.get("email") and email_clientes.parabens_compra(
+                    comprador.get("nome_cliente") or "", comprador["email"], moto):
+                mensagem += " E-mail de parabéns enviado ao cliente."
 
         self.novo()
         await self.carregar()

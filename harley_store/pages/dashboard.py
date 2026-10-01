@@ -107,9 +107,9 @@ def dashboard_page() -> rx.Component:
         _secao(
             "MOTOS DA LOJA",
             rx.grid(
-                _cartao("Motos em estoque", DashboardState.motos_em_estoque, "bike", href="/motos-loja"),
-                _cartao("Valor do estoque", rx.text("R$ ", DashboardState.valor_estoque_motos), "gem", href="/motos-loja"),
-                _cartao("Vendidas no mês", DashboardState.motos_vendidas_mes, "badge-dollar-sign", href="/motos-loja"),
+                _cartao("Motos em estoque", DashboardState.motos_em_estoque, "bike", href="/produtos?aba=motos"),
+                _cartao("Valor do estoque", rx.text("R$ ", DashboardState.valor_estoque_motos), "gem", href="/produtos?aba=motos"),
+                _cartao("Vendidas no mês", DashboardState.motos_vendidas_mes, "badge-dollar-sign", href="/produtos?aba=motos"),
                 columns=rx.breakpoints(initial="1", sm="3"),
                 spacing="4",
                 width="100%",
