@@ -38,7 +38,7 @@ class LeadsState(rx.State):
     form_id: Optional[int] = None
     nome: str = ""
     telefone: str = ""
-    whatsapp: str = ""
+    telegram: str = ""
     email: str = ""
     origem: str = servico.ORIGENS[0]
     interesse: str = servico.INTERESSES[0]
@@ -141,7 +141,7 @@ class LeadsState(rx.State):
         self.form_id = int(linha["id"]) if linha.get("id") else None
         self.nome = linha.get("nome", "")
         self.telefone = linha.get("telefone", "")
-        self.whatsapp = linha.get("whatsapp", "")
+        self.telegram = linha.get("telegram", "")
         self.email = linha.get("email", "")
         self.origem = linha.get("origem") or servico.ORIGENS[0]
         self.interesse = linha.get("interesse") or servico.INTERESSES[0]
@@ -173,7 +173,7 @@ class LeadsState(rx.State):
 
     @rx.event
     async def salvar(self):
-        form = {"nome": self.nome, "telefone": self.telefone, "whatsapp": self.whatsapp, "email": self.email,
+        form = {"nome": self.nome, "telefone": self.telefone, "telegram": self.telegram, "email": self.email,
                 "origem": self.origem, "interesse": self.interesse, "moto_interesse": self.moto_interesse,
                 "moto_id": self.moto_id, "observacao": self.observacao, "status": self.status}
         try:

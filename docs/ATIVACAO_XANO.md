@@ -30,13 +30,13 @@ mostra a situação de cada item ao vivo. Depois de criar algo no Xano, clique e
 
 | Campo | Tipo | Para quê |
 |---|---|---|
-| `whatsapp` | text | número do WhatsApp |
+| `telegram` | text | @usuário ou número do Telegram |
 | `cidade` | text | cidade |
 | `observacoes` | text | observações |
 | `status` | text | Lead, Cliente, Cliente recorrente ou Inativo (vazio = Cliente) |
 | `created_at` | timestamp, padrão `now` | data de cadastro |
 
-Libera a ficha completa, o filtro por status e por cidade e o botão do WhatsApp.
+Libera a ficha completa, o filtro por status e por cidade e o botão do Telegram.
 
 ### 2. `motos_clientes`: 6 campos novos
 
@@ -97,7 +97,7 @@ Na Configuração, o botão **Criar as formas mais comuns** preenche a tabela.
 
 ### 6. Tabelas novas `leads` e `interacoes`
 
-`leads`: `nome`, `telefone`, `whatsapp`, `email`, `origem`, `interesse`,
+`leads`: `nome`, `telefone`, `telegram`, `email`, `origem`, `interesse`,
 `moto_interesse`, `observacao` e `status` (text); `moto_id`, `cliente_id` e
 `usuario_id` (integer); `created_at` (timestamp, padrão now).
 

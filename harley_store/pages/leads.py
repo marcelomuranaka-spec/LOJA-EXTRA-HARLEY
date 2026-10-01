@@ -41,7 +41,7 @@ def _linha(row: dict) -> rx.Component:
         ),
         rx.table.cell(
             rx.vstack(
-                rx.text(rx.cond(row["whatsapp"] != "", row["whatsapp"], row["telefone"]), size="2"),
+                rx.text(rx.cond(row["telefone"] != "", row["telefone"], row["telegram"]), size="2"),
                 rx.cond(row["email"] != "", rx.text(row["email"], size="1", color=rx.color("gray", 10))),
                 spacing="0",
                 align="start",
@@ -59,10 +59,10 @@ def _linha(row: dict) -> rx.Component:
             rx.flex(
                 rx.button(rx.icon("eye", size=14), "Abrir", size="1", variant="soft", color_scheme="gray",
                           on_click=L.visualizar(row["id"])),
-                rx.cond(row["whatsapp_link"] != "",
-                        rx.link(rx.button(rx.icon("message-circle", size=14), size="1", variant="soft",
-                                          color_scheme="green", title="WhatsApp"),
-                                href=row["whatsapp_link"], is_external=True)),
+                rx.cond(row["telegram_link"] != "",
+                        rx.link(rx.button(rx.icon("send", size=14), size="1", variant="soft",
+                                          color_scheme="sky", title="Telegram"),
+                                href=row["telegram_link"], is_external=True)),
                 gap="0.5rem",
                 flex_wrap="wrap",
             )
@@ -78,7 +78,7 @@ def _formulario() -> rx.Component:
         campo("Nome *", entrada(L.nome, L.set_nome)),
         linha(
             campo("Telefone", entrada(L.telefone, L.set_telefone, "(11) 99999-9999")),
-            campo("WhatsApp", entrada(L.whatsapp, L.set_whatsapp, "(11) 99999-9999")),
+            campo("Telegram", entrada(L.telegram, L.set_telegram, "@usuario ou (11) 99999-9999")),
             campo("E-mail", entrada(L.email, L.set_email, tipo="email")),
         ),
         linha(
@@ -124,7 +124,7 @@ def _ficha() -> rx.Component:
                                                   variant="soft"), spacing="2", align="center"),
         rx.flex(
             _dado("Telefone", lead["telefone"]),
-            _dado("WhatsApp", lead["whatsapp"]),
+            _dado("Telegram", lead["telegram"]),
             _dado("E-mail", lead["email"]),
             _dado("Origem", lead["origem"]),
             _dado("Interesse", lead["interesse"]),
@@ -142,9 +142,9 @@ def _ficha() -> rx.Component:
                           on_click=L.abrir_converter),
             ),
             rx.button(rx.icon("pencil", size=14), "Editar", variant="soft", on_click=L.abrir_editar(lead["id"].to(str))),
-            rx.cond(lead["whatsapp_link"] != "",
-                    rx.link(rx.button(rx.icon("message-circle", size=14), "WhatsApp", variant="soft",
-                                      color_scheme="green"), href=lead["whatsapp_link"].to(str), is_external=True)),
+            rx.cond(lead["telegram_link"] != "",
+                    rx.link(rx.button(rx.icon("send", size=14), "Telegram", variant="soft",
+                                      color_scheme="sky"), href=lead["telegram_link"].to(str), is_external=True)),
             rx.button(rx.icon("mail", size=14), "E-mail", variant="soft", color_scheme="gray", on_click=L.abrir_email),
             confirm_delete_button(L.excluir(lead["id"].to(str)), item_label="este lead"),
             gap="0.5rem", flex_wrap="wrap",
@@ -185,7 +185,7 @@ def _converter() -> rx.Component:
         L.dialogo_converter,
         L.fechar_converter,
         "Converter lead em cliente",
-        rx.text("Os dados do lead (nome, telefone, WhatsApp, e-mail e observação) vão para o cadastro do cliente. "
+        rx.text("Os dados do lead (nome, telefone, Telegram, e-mail e observação) vão para o cadastro do cliente. "
                 "Se já existir um cliente com o mesmo CPF/CNPJ, o lead é só ligado a ele — nada é duplicado.",
                 size="2"),
         campo("CPF ou CNPJ do cliente *", entrada(L.conv_documento, L.set_conv_documento, "000.000.000-00")),

@@ -45,10 +45,10 @@ def _linha(row: dict) -> rx.Component:
                 rx.button(rx.icon("pencil", size=14), "Editar", size="1", variant="soft",
                           on_click=ClientesState.abrir_editar(row["id"])),
                 rx.cond(
-                    row["whatsapp_link"] != "",
-                    rx.link(rx.button(rx.icon("message-circle", size=14), size="1", variant="soft",
-                                      color_scheme="green", title="Abrir WhatsApp"),
-                            href=row["whatsapp_link"], is_external=True),
+                    row["telegram_link"] != "",
+                    rx.link(rx.button(rx.icon("send", size=14), size="1", variant="soft",
+                                      color_scheme="sky", title="Abrir Telegram"),
+                            href=row["telegram_link"], is_external=True),
                 ),
                 confirm_delete_button(ClientesState.excluir(row["id"]),
                                       item_label=f"o cliente “{row['nome_cliente']}”"),
@@ -72,9 +72,9 @@ def formulario_cliente() -> rx.Component:
         ),
         linha(
             campo("Telefone", entrada(ClientesState.telefone, ClientesState.set_telefone, "(11) 99999-9999")),
-            rx.cond(ClientesState.tem_whatsapp,
-                    campo("WhatsApp", entrada(ClientesState.whatsapp, ClientesState.set_whatsapp,
-                                              "(11) 99999-9999"))),
+            rx.cond(ClientesState.tem_telegram,
+                    campo("Telegram", entrada(ClientesState.telegram, ClientesState.set_telegram,
+                                              "@usuario ou (11) 99999-9999"))),
             campo("E-mail", entrada(ClientesState.email, ClientesState.set_email, "cliente@email.com",
                                     tipo="email")),
         ),
@@ -92,7 +92,7 @@ def formulario_cliente() -> rx.Component:
                                                   on_change=ClientesState.set_observacoes, width="100%",
                                                   rows="3"))),
         rx.cond(ClientesState.campos_extras_pendentes,
-                rx.callout("WhatsApp, cidade, status, observações e data de cadastro aparecem aqui depois que "
+                rx.callout("Telegram, cidade, status, observações e data de cadastro aparecem aqui depois que "
                            "os campos forem criados no Xano (ver Configuração do sistema).",
                            icon="plug-zap", color_scheme="orange", size="1", width="100%")),
         mensagem_erro(ClientesState.erro_form),
@@ -134,7 +134,7 @@ def clientes_page() -> rx.Component:
         ),
         rx.cond(ClientesState.campos_extras_pendentes,
                 aviso_ativacao("Ficha completa do cliente aguardando o Xano",
-                               "WhatsApp, cidade, status, observações e data de cadastro já estão prontos "
+                               "Telegram, cidade, status, observações e data de cadastro já estão prontos "
                                "no sistema e aparecem assim que os campos forem criados na tabela clientes.")),
         _filtros(),
         rx.cond(

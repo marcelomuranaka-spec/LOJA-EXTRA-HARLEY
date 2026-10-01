@@ -41,10 +41,10 @@ def _cabecalho() -> rx.Component:
             rx.flex(
                 rx.button(rx.icon("pencil", size=14), "Editar", variant="soft",
                           on_click=ClientesState.abrir_editar(D.cliente_id_atual.to(str))),
-                rx.cond(c["whatsapp_link"] != "",
-                        rx.link(rx.button(rx.icon("message-circle", size=14), "WhatsApp", variant="soft",
-                                          color_scheme="green"),
-                                href=c["whatsapp_link"].to(str), is_external=True)),
+                rx.cond(c["telegram_link"] != "",
+                        rx.link(rx.button(rx.icon("send", size=14), "Telegram", variant="soft",
+                                          color_scheme="sky"),
+                                href=c["telegram_link"].to(str), is_external=True)),
                 rx.button(rx.icon("mail", size=14), "Enviar e-mail", variant="soft", color_scheme="gray",
                           on_click=D.abrir_email),
                 rx.button(rx.icon("message-square-plus", size=14), "Registrar interação",
@@ -70,7 +70,7 @@ def _dados() -> rx.Component:
         rx.flex(
             _dado("CPF/CNPJ", c["cpf_cnpj"]),
             _dado("Telefone", c["telefone"]),
-            _dado("WhatsApp", c["whatsapp"]),
+            _dado("Telegram", c["telegram"]),
             _dado("E-mail", c["email"]),
             _dado("Endereço", c["endereco"]),
             _dado("Cidade", c["cidade"]),

@@ -32,7 +32,7 @@ class ClientesState(rx.State):
     cidades: list[str] = ["Todas"]
 
     # campos novos já criados no Xano (ver recursos.py)
-    tem_whatsapp: bool = False
+    tem_telegram: bool = False
     tem_cidade: bool = False
     tem_status: bool = False
     tem_observacoes: bool = False
@@ -44,7 +44,7 @@ class ClientesState(rx.State):
     nome_cliente: str = ""
     cpf_cnpj: str = ""
     telefone: str = ""
-    whatsapp: str = ""
+    telegram: str = ""
     email: str = ""
     endereco: str = ""
     cidade: str = ""
@@ -73,7 +73,7 @@ class ClientesState(rx.State):
 
     @rx.var
     def campos_extras_pendentes(self) -> bool:
-        return not (self.tem_whatsapp and self.tem_cidade and self.tem_status
+        return not (self.tem_telegram and self.tem_cidade and self.tem_status
                     and self.tem_observacoes and self.tem_data)
 
     # ---------------------------------------------------------- listagem
@@ -84,7 +84,7 @@ class ClientesState(rx.State):
             xano.listar(servico.TABELA), xano.listar(servico.TABELA_MOTOS),
             xano.listar("transacoes"), recursos.campos_disponiveis("clientes"),
         )
-        self.tem_whatsapp = "whatsapp" in disponiveis
+        self.tem_telegram = "telegram" in disponiveis
         self.tem_cidade = "cidade" in disponiveis
         self.tem_status = "status" in disponiveis
         self.tem_observacoes = "observacoes" in disponiveis
@@ -159,7 +159,7 @@ class ClientesState(rx.State):
         self.nome_cliente = linha.get("nome_cliente", "")
         self.cpf_cnpj = linha.get("cpf_cnpj", "")
         self.telefone = linha.get("telefone", "")
-        self.whatsapp = linha.get("whatsapp", "")
+        self.telegram = linha.get("telegram", "")
         self.email = linha.get("email", "")
         self.endereco = linha.get("endereco", "")
         self.cidade = linha.get("cidade", "")
@@ -189,7 +189,7 @@ class ClientesState(rx.State):
     async def salvar(self):
         form = {
             "nome_cliente": self.nome_cliente, "cpf_cnpj": self.cpf_cnpj, "telefone": self.telefone,
-            "whatsapp": self.whatsapp, "email": self.email, "endereco": self.endereco,
+            "telegram": self.telegram, "email": self.email, "endereco": self.endereco,
             "cidade": self.cidade, "status": self.status, "observacoes": self.observacoes,
         }
         try:

@@ -48,11 +48,11 @@ _CRIADO_EM = Campo("created_at", "timestamp (padrão: now)", "data de cadastro")
 
 REQUISITOS: list[Requisito] = [
     Requisito(
-        "clientes", "Clientes: WhatsApp, cidade, observações, status e data de cadastro",
-        "ficha completa do cliente, filtro por status e por cidade, botão do WhatsApp",
+        "clientes", "Clientes: Telegram, cidade, observações, status e data de cadastro",
+        "ficha completa do cliente, filtro por status e por cidade, botão do Telegram",
         tabela="clientes",
         campos=(
-            Campo("whatsapp", "text", "número do WhatsApp"),
+            Campo("telegram", "text", "@usuário ou número do Telegram"),
             Campo("cidade", "text", "cidade"),
             Campo("observacoes", "text", "observações"),
             Campo("status", "text", "Lead, Cliente, Cliente recorrente ou Inativo"),
@@ -129,7 +129,7 @@ REQUISITOS: list[Requisito] = [
         campos=(
             Campo("nome", "text", "nome"),
             Campo("telefone", "text", "telefone"),
-            Campo("whatsapp", "text", "WhatsApp"),
+            Campo("telegram", "text", "@usuário ou número do Telegram"),
             Campo("email", "text", "e-mail"),
             Campo("origem", "text", "de onde veio (Loja, Instagram, Telegram...)"),
             Campo("interesse", "text", "o que procura"),

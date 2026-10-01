@@ -113,11 +113,41 @@ def formatar_telefone(texto) -> str:
     return (texto or "").strip()
 
 
-def link_whatsapp(texto) -> str:
-    """Link wa.me para abrir a conversa (Brasil = 55 na frente)."""
-    d = so_digitos(texto)
+_USUARIO_TELEGRAM = re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$")
+
+
+def formatar_telegram(texto) -> str:
+    """Contato do Telegram: "@usuario" (aceita também "usuario" ou o link
+    t.me/usuario) ou um número de telefone, formatado. Vazio = ""."""
+    t = (texto or "").strip()
+    if not t:
+        return ""
+    if "t.me/" in t:
+        t = t.rstrip("/").rsplit("/", 1)[-1]
+    usuario = t.lstrip("@").strip()
+    if _USUARIO_TELEGRAM.match(usuario):
+        return "@" + usuario
+    return formatar_telefone(t)
+
+
+def telegram_valido(texto) -> bool:
+    t = formatar_telegram(texto)
+    if t.startswith("@"):
+        return bool(_USUARIO_TELEGRAM.match(t[1:]))
+    return len(so_digitos(t)) in (10, 11, 12, 13) and not re.search(r"[A-Za-z@]", t)
+
+
+def link_telegram(texto) -> str:
+    """Link para abrir a conversa no Telegram: t.me/usuario ou t.me/+55DDNUMERO
+    (pelo número só abre se a pessoa permitir ser encontrada pelo telefone)."""
+    if not telegram_valido(texto):
+        return ""
+    t = formatar_telegram(texto)
+    if t.startswith("@"):
+        return f"https://t.me/{t[1:]}"
+    d = so_digitos(t)
     if not d:
         return ""
     if len(d) in (10, 11):
         d = "55" + d
-    return f"https://wa.me/{d}"
+    return f"https://t.me/+{d}"

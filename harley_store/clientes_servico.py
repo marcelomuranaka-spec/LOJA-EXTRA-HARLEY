@@ -7,7 +7,7 @@ Separado dos states (telas) para poder ser testado sem o Reflex. As funções
 `montar_*` são puras: recebem as listagens das tabelas e devolvem dicts
 prontos para a tela.
 
-Campos novos (WhatsApp, cidade, status... ver `recursos.py`) só são enviados
+Campos novos (Telegram, cidade, status... ver `recursos.py`) só são enviados
 ao Xano quando já existem lá; enquanto não existem, o resto do cadastro
 continua funcionando como antes.
 """
@@ -39,7 +39,7 @@ def status_de(registro: dict) -> str:
 # ------------------------------------------------------------------ clientes
 
 def validar_cliente(form: dict, outros: list[dict], cliente_id: int | None, cpf_original: str = "") -> dict:
-    """form: nome_cliente, cpf_cnpj, telefone, whatsapp, email, endereco,
+    """form: nome_cliente, cpf_cnpj, telefone, telegram, email, endereco,
     cidade, status, observacoes (strings). Devolve os dados para o Xano
     (todos os campos; quem grava filtra os que existem). Levanta ErroValidacao."""
     nome = (form.get("nome_cliente") or "").strip()
@@ -58,6 +58,9 @@ def validar_cliente(form: dict, outros: list[dict], cliente_id: int | None, cpf_
     email = (form.get("email") or "").strip().lower()
     if email and not fmt.email_valido(email):
         raise ErroValidacao("E-mail inválido.")
+    telegram = (form.get("telegram") or "").strip()
+    if telegram and not fmt.telegram_valido(telegram):
+        raise ErroValidacao("Telegram: informe o @usuário (5 a 32 letras, números ou _) ou o número com DDD.")
     status = (form.get("status") or "").strip() or STATUS_PADRAO
     if status not in STATUS_CLIENTE:
         raise ErroValidacao("Status inválido.")
@@ -67,7 +70,7 @@ def validar_cliente(form: dict, outros: list[dict], cliente_id: int | None, cpf_
         "telefone": fmt.formatar_telefone(form.get("telefone")) or None,
         "email": email or None,
         "endereco": (form.get("endereco") or "").strip() or None,
-        "whatsapp": fmt.formatar_telefone(form.get("whatsapp")) or None,
+        "telegram": fmt.formatar_telegram(telegram) or None,
         "cidade": (form.get("cidade") or "").strip() or None,
         "status": status,
         "observacoes": (form.get("observacoes") or "").strip() or None,
@@ -97,8 +100,8 @@ def linha_cliente(r: dict, qtd_motos: int = 0, qtd_compras: int = 0) -> dict:
         "nome_cliente": r.get("nome_cliente") or "",
         "cpf_cnpj": r.get("cpf_cnpj") or "",
         "telefone": r.get("telefone") or "",
-        "whatsapp": r.get("whatsapp") or "",
-        "whatsapp_link": fmt.link_whatsapp(r.get("whatsapp") or r.get("telefone")),
+        "telegram": r.get("telegram") or "",
+        "telegram_link": fmt.link_telegram(r.get("telegram")),
         "email": r.get("email") or "",
         "endereco": r.get("endereco") or "",
         "cidade": r.get("cidade") or "",
@@ -133,7 +136,7 @@ def filtrar_clientes(linhas: list[dict], busca: str, status: str, cidade: str, o
             continue
         if termo:
             texto = " ".join((linha["nome_cliente"], linha["email"], linha["cidade"])).lower()
-            numeros = fmt.so_digitos(" ".join((linha["cpf_cnpj"], linha["telefone"], linha["whatsapp"])))
+            numeros = fmt.so_digitos(" ".join((linha["cpf_cnpj"], linha["telefone"], linha["telegram"])))
             if termo not in texto and not (termo_digitos and len(termo_digitos) >= 3 and termo_digitos in numeros):
                 continue
         resultado.append(linha)

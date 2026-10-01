@@ -6,7 +6,7 @@ Funil: Novo → Em atendimento → Proposta enviada → Negociação → Convert
 
 Conversão LEAD → CLIENTE sem duplicar dados:
 - se já existe cliente com o mesmo CPF/CNPJ, o lead só é LIGADO a ele;
-- senão, o cliente é criado com os dados do lead (nome, telefone, WhatsApp,
+- senão, o cliente é criado com os dados do lead (nome, telefone, Telegram,
   e-mail, observação), mais o CPF/CNPJ pedido na conversão (obrigatório no
   cadastro de clientes);
 - o lead não é apagado: fica "Convertido", com `cliente_id` apontando para o
@@ -26,11 +26,11 @@ STATUS_LEAD = ["Novo", "Em atendimento", "Proposta enviada", "Negociação", "Co
 ABERTOS = {"Novo", "Em atendimento", "Proposta enviada", "Negociação"}
 CORES = {"Novo": "blue", "Em atendimento": "amber", "Proposta enviada": "purple", "Negociação": "orange",
          "Convertido": "green", "Perdido": "gray"}
-ORIGENS = ["Loja (balcão)", "Telefone", "WhatsApp", "Instagram", "Facebook", "Site", "Indicação",
+ORIGENS = ["Loja (balcão)", "Telefone", "Telegram", "Instagram", "Facebook", "Site", "Indicação",
            "Telegram (bot)", "Evento", "Outro"]
 INTERESSES = ["Comprar moto", "Peças e acessórios", "Serviço / oficina", "Vender ou consignar moto",
               "Financiamento", "Outro"]
-CAMPOS = ["nome", "telefone", "whatsapp", "email", "origem", "interesse", "moto_interesse", "moto_id",
+CAMPOS = ["nome", "telefone", "telegram", "email", "origem", "interesse", "moto_interesse", "moto_id",
           "observacao", "status", "cliente_id", "usuario_id"]
 
 
@@ -48,10 +48,13 @@ def validar_lead(form: dict) -> dict:
     if not nome:
         raise ErroValidacao("Informe o nome do lead.")
     telefone = fmt.formatar_telefone(form.get("telefone"))
-    whatsapp = fmt.formatar_telefone(form.get("whatsapp"))
+    telegram = (form.get("telegram") or "").strip()
+    if telegram and not fmt.telegram_valido(telegram):
+        raise ErroValidacao("Telegram: informe o @usuário (5 a 32 letras, números ou _) ou o número com DDD.")
+    telegram = fmt.formatar_telegram(telegram)
     email = (form.get("email") or "").strip().lower()
-    if not (telefone or whatsapp or email):
-        raise ErroValidacao("Informe ao menos um contato: telefone, WhatsApp ou e-mail.")
+    if not (telefone or telegram or email):
+        raise ErroValidacao("Informe ao menos um contato: telefone, Telegram ou e-mail.")
     if email and not fmt.email_valido(email):
         raise ErroValidacao("E-mail inválido.")
     status = (form.get("status") or "Novo").strip()
@@ -64,7 +67,7 @@ def validar_lead(form: dict) -> dict:
     return {
         "nome": nome,
         "telefone": telefone or None,
-        "whatsapp": whatsapp or None,
+        "telegram": telegram or None,
         "email": email or None,
         "origem": (form.get("origem") or "").strip() or None,
         "interesse": (form.get("interesse") or "").strip() or None,
@@ -84,8 +87,8 @@ def linha_lead(r: dict, motos_por_id: dict[int, str] | None = None, clientes_por
         "id": str(r["id"]),
         "nome": r.get("nome") or "",
         "telefone": r.get("telefone") or "",
-        "whatsapp": r.get("whatsapp") or "",
-        "whatsapp_link": fmt.link_whatsapp(r.get("whatsapp") or r.get("telefone")),
+        "telegram": r.get("telegram") or "",
+        "telegram_link": fmt.link_telegram(r.get("telegram")),
         "email": r.get("email") or "",
         "origem": r.get("origem") or "",
         "interesse": r.get("interesse") or "",
@@ -119,7 +122,8 @@ def filtrar(linhas: list[dict], busca: str, status: str, origem: str) -> list[di
             continue
         if termo:
             texto = " ".join((l["nome"], l["email"], l["interesse"], l["moto"], l["origem"])).lower()
-            numeros = fmt.so_digitos(l["telefone"] + l["whatsapp"])
+            texto += " " + l["telegram"].lower()
+            numeros = fmt.so_digitos(l["telefone"] + l["telegram"])
             if termo not in texto and not (len(digitos) >= 3 and digitos in numeros):
                 continue
         resultado.append(l)
@@ -147,8 +151,8 @@ async def converter(lead_id: int, documento: str, usuario_id: int = 0) -> tuple[
         form = {
             "nome_cliente": lead.get("nome"),
             "cpf_cnpj": documento,
-            "telefone": lead.get("telefone") or lead.get("whatsapp"),
-            "whatsapp": lead.get("whatsapp"),
+            "telefone": lead.get("telefone"),
+            "telegram": lead.get("telegram"),
             "email": lead.get("email"),
             "status": "Cliente",
             "observacoes": "\n".join(p for p in (

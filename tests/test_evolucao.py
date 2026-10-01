@@ -212,8 +212,16 @@ class TestFormatacao(unittest.TestCase):
         self.assertEqual(formatacao.moeda(1234.5), "1.234,50")
         self.assertEqual(formatacao.inteiro("12.500"), 12500)
 
-    def test_whatsapp(self):
-        self.assertEqual(formatacao.link_whatsapp("(11) 98888-7777"), "https://wa.me/5511988887777")
+    def test_telegram(self):
+        self.assertEqual(formatacao.formatar_telegram("lojaharley"), "@lojaharley")
+        self.assertEqual(formatacao.formatar_telegram("https://t.me/lojaharley"), "@lojaharley")
+        self.assertEqual(formatacao.link_telegram("@lojaharley"), "https://t.me/lojaharley")
+        self.assertEqual(formatacao.link_telegram("(11) 98888-7777"), "https://t.me/+5511988887777")
+        self.assertEqual(formatacao.link_telegram(""), "")
+        self.assertTrue(formatacao.telegram_valido("11988887777"))
+        self.assertFalse(formatacao.telegram_valido("@ab"))
+        self.assertFalse(formatacao.telegram_valido("@123abc"))
+        self.assertEqual(formatacao.link_telegram("@123abc"), "")
 
 
 class TestImagens(unittest.TestCase):
@@ -406,7 +414,7 @@ class TestLeads(ComBancoFalso):
     async def test_conversao_cria_cliente_com_dados_do_lead(self):
         banco = self.preparar(BancoFalso(
             clientes=[{"id": 1, "nome_cliente": "Outro", "cpf_cnpj": "111.222.333-44"}],
-            leads=[{"id": 5, "nome": "Rui Lima", "whatsapp": "(11) 98888-0000", "email": "rui@x.com",
+            leads=[{"id": 5, "nome": "Rui Lima", "telegram": "@ruilima", "email": "rui@x.com",
                     "origem": "Instagram", "status": "Negociação", "cliente_id": 0}],
         ))
         cliente_id, criado = await leads_servico.converter(5, "52998224725")
