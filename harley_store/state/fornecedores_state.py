@@ -68,28 +68,30 @@ class FornecedoresState(rx.State):
         nome = self.nome_fornecedor.strip()
         cnpj = self.cnpj.strip()
         if not nome or not cnpj:
-            return rx.window_alert("Preencha nome e CNPJ do fornecedor.")
+            return rx.toast.error("Preencha nome e CNPJ do fornecedor.")
 
         duplicado = any(
             r["cnpj"] == cnpj and str(r["id"]) != str(self.form_id)
             for r in await xano.listar(TABELA)
         )
         if duplicado:
-            return rx.window_alert("Já existe um fornecedor com esse CNPJ.")
+            return rx.toast.error("Já existe um fornecedor com esse CNPJ.")
 
         dados = {"nome_fornecedor": nome, "cnpj": cnpj, "contato": self.contato.strip() or None}
         if self.form_id is None:
             await xano.criar(TABELA, dados)
         else:
-            await xano.atualizar(TABELA, self.form_id, dados)
+            await xano.atualizar_mesclando(TABELA, self.form_id, dados)
 
         self.novo()
         await self.carregar()
+        return rx.toast.success("Fornecedor salvo.")
 
     @rx.event
     async def excluir(self, fornecedor_id: str):
         encontrados = await integridade.dependentes(TABELA, int(fornecedor_id))
         if encontrados:
-            return rx.window_alert(integridade.mensagem_bloqueio("este fornecedor", encontrados))
+            return rx.toast.error(integridade.mensagem_bloqueio("este fornecedor", encontrados))
         await xano.excluir(TABELA, int(fornecedor_id))
         await self.carregar()
+        return rx.toast.success("Fornecedor excluído.")

@@ -15,6 +15,11 @@ Os itens de venda (itens_transacao) de propósito não bloqueiam a exclusão
 de produtos: o item guarda a descrição justamente para o comprovante
 continuar correto se o produto for excluído (ver xano/table/itens_transacao.xs).
 
+Relações criadas depois do modelo original também entram: moto da loja
+vendida/reservada para o cliente (`motos.cliente_id`), categorias de
+produtos, leads, interações e e-mails. Tabelas que ainda não existem no Xano
+são ignoradas.
+
 A consulta usa as listagens em cache (xano_client.listar): um registro
 criado por outro processo nos últimos minutos pode não ser visto.
 """
@@ -28,6 +33,21 @@ DEPENDENCIAS: dict[str, list[tuple[str, str, str]]] = {
     "clientes": [
         ("motos_clientes", "id_cliente", "moto(s) do cliente"),
         ("transacoes", "id_cliente", "venda(s)"),
+        ("motos", "cliente_id", "moto(s) da loja ligada(s) a ele"),
+        ("leads", "cliente_id", "lead(s) convertido(s)"),
+        ("interacoes", "cliente_id", "interação(ões) no histórico"),
+        ("emails", "cliente_id", "e-mail(s) no histórico"),
+    ],
+    "categorias": [
+        ("produtos", "categoria_id", "produto(s)"),
+    ],
+    "motos": [
+        ("transacoes", "moto_id", "venda(s)"),
+        ("leads", "moto_id", "lead(s) interessado(s)"),
+    ],
+    "leads": [
+        ("interacoes", "lead_id", "interação(ões) no histórico"),
+        ("emails", "lead_id", "e-mail(s) no histórico"),
     ],
     "fornecedores": [
         ("entrada_mercadoria", "id_fornecedor", "compra(s)"),
@@ -59,7 +79,7 @@ def contar_dependentes(tabela: str, registro_id: int, listagens: dict[str, list[
 
 async def dependentes(tabela: str, registro_id: int) -> list[str]:
     filhas = {filha for filha, _, _ in DEPENDENCIAS.get(tabela, [])}
-    listagens = {filha: await xano.listar(filha) for filha in filhas}
+    listagens = {filha: (await xano.listar_se_existir(filha)) or [] for filha in filhas}
     return contar_dependentes(tabela, int(registro_id), listagens)
 
 

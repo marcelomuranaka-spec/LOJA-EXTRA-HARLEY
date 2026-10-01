@@ -10,19 +10,50 @@ import reflex as rx
 from ..state.auth_state import AuthState
 from .tema import BORDA, LARANJA, LARANJA_SUAVE, LOGO, PRETO, PRETO_CARTAO
 
-MENU_ITEMS = [
-    ("/painel", "layout-dashboard", "Painel"),
-    ("/motos-loja", "bike", "Motos da loja"),
-    ("/produtos", "package", "Produtos"),
-    ("/clientes", "users", "Clientes"),
-    ("/motos", "key-round", "Motos dos clientes"),
-    ("/vendas", "shopping-cart", "Vendas / Balcão"),
-    ("/ordens-servico", "wrench", "Ordens de serviço"),
-    ("/compras", "truck", "Compras (entrada)"),
-    ("/fornecedores", "factory", "Fornecedores"),
-    ("/funcionarios", "id-card", "Funcionários"),
-    ("/usuarios", "shield-user", "Usuários do sistema"),
+# (grupo, [(rota, ícone, rótulo)]). Grupo "Administração" só aparece para
+# administradores (o acesso em si é barrado no servidor: seguranca.py).
+MENU_GRUPOS = [
+    ("", [
+        ("/painel", "layout-dashboard", "Painel"),
+    ]),
+    ("Atendimento", [
+        ("/clientes", "users", "Clientes"),
+        ("/leads", "user-search", "Leads"),
+        ("/vendas", "shopping-cart", "Vendas / Balcão"),
+        ("/ordens-servico", "wrench", "Ordens de serviço"),
+        ("/emails", "mail", "E-mails"),
+    ]),
+    ("Motos", [
+        ("/motos-loja", "bike", "Motos da loja"),
+        ("/motos", "key-round", "Motos dos clientes"),
+    ]),
+    ("Estoque", [
+        ("/produtos", "package", "Produtos"),
+        ("/categorias", "tags", "Categorias"),
+        ("/compras", "truck", "Compras (entrada)"),
+    ]),
+    ("Cadastros", [
+        ("/fornecedores", "factory", "Fornecedores"),
+        ("/funcionarios", "id-card", "Funcionários"),
+    ]),
 ]
+MENU_ADMIN = [
+    ("/usuarios", "shield-user", "Usuários do sistema"),
+    ("/configuracao", "settings", "Configuração"),
+]
+MENU_ITEMS = [item for _, itens in MENU_GRUPOS for item in itens] + MENU_ADMIN
+
+
+def _titulo_grupo(texto: str) -> rx.Component:
+    return rx.text(
+        texto.upper(),
+        size="1",
+        weight="bold",
+        color=rx.color("gray", 9),
+        letter_spacing="0.08em",
+        padding="0.6rem 0.75rem 0.15rem",
+        display=["none", "none", "block"],
+    )
 
 
 def _menu_link(href: str, icon: str, label: str) -> rx.Component:
@@ -66,21 +97,41 @@ def sidebar() -> rx.Component:
                 padding_bottom="0.75rem",
                 align_self="center",
             ),
-            *[_menu_link(href, icon, label) for href, icon, label in MENU_ITEMS],
+            *[
+                componente
+                for grupo, itens in MENU_GRUPOS
+                for componente in ([_titulo_grupo(grupo)] if grupo else [])
+                + [_menu_link(href, icon, label) for href, icon, label in itens]
+            ],
+            rx.cond(
+                AuthState.eh_admin,
+                rx.vstack(
+                    _titulo_grupo("Administração"),
+                    *[_menu_link(href, icon, label) for href, icon, label in MENU_ADMIN],
+                    spacing="1",
+                    width="100%",
+                ),
+            ),
             rx.spacer(),
             rx.box(height="1px", width="100%", background=BORDA),
             rx.hstack(
-                rx.icon("circle-user-round", size=18, color=LARANJA),
-                rx.text(
-                    AuthState.usuario_logado,
-                    size="2",
-                    color=rx.color("gray", 11),
-                    display=["none", "none", "block"],
+                rx.cond(
+                    AuthState.eh_admin,
+                    rx.icon("shield-check", size=18, color=LARANJA),
+                    rx.icon("circle-user-round", size=18, color=LARANJA),
+                ),
+                rx.vstack(
+                    rx.text(AuthState.usuario_logado, size="2", color=rx.color("gray", 11)),
+                    rx.text(AuthState.perfil_nome, size="1", color=rx.color("gray", 9)),
+                    spacing="0",
+                    align="start",
+                    display=["none", "none", "flex"],
                 ),
                 align="center",
                 spacing="2",
                 width="100%",
                 padding="0.4rem 0.75rem",
+                title=AuthState.perfil_nome,
             ),
             rx.button(
                 rx.icon("log-out", size=16),

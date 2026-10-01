@@ -2,6 +2,7 @@ import reflex as rx
 
 from ..components.layout import page
 from ..components.tema import BORDA, LARANJA, LARANJA_SUAVE, PRETO_CARTAO, TEXTO_SECUNDARIO
+from ..state.auth_state import AuthState
 from ..state.dashboard_state import DashboardState
 
 
@@ -102,51 +103,147 @@ def _linha_atividade(row: dict) -> rx.Component:
     )
 
 
+def _venda_recente(v: dict) -> rx.Component:
+    return rx.hstack(
+        rx.vstack(
+            rx.text("nº ", v["id"], " · ", v["data"], size="1", color=TEXTO_SECUNDARIO),
+            rx.cond(v["cliente_id"] != "0",
+                    rx.link(v["cliente"], href=f"/clientes/{v['cliente_id']}", size="2"),
+                    rx.text(v["cliente"], size="2")),
+            spacing="0",
+            align="start",
+            min_width="0",
+        ),
+        rx.spacer(),
+        rx.cond(v["cancelada"], rx.badge("cancelada", color_scheme="red", variant="soft")),
+        rx.text("R$ ", v["valor"], size="2", weight="bold", white_space="nowrap"),
+        align="center",
+        width="100%",
+        padding_y="0.35rem",
+        border_bottom=f"1px solid {BORDA}",
+    )
+
+
+def _lead_recente(l: dict) -> rx.Component:
+    return rx.hstack(
+        rx.vstack(
+            rx.text(l["data"], " · ", rx.cond(l["origem"] != "", l["origem"], "origem —"), size="1",
+                    color=TEXTO_SECUNDARIO),
+            rx.text(l["nome"], size="2"),
+            spacing="0",
+            align="start",
+            min_width="0",
+        ),
+        rx.spacer(),
+        rx.badge(l["status"], color_scheme=l["status_cor"].to(str), variant="soft"),
+        align="center",
+        width="100%",
+        padding_y="0.35rem",
+        border_bottom=f"1px solid {BORDA}",
+    )
+
+
+def _quadro(titulo: str, href: str, *filhos: rx.Component) -> rx.Component:
+    return rx.vstack(
+        rx.hstack(
+            rx.text(titulo, size="3", weight="bold", color="white"),
+            rx.spacer(),
+            rx.link("ver tudo", href=href, size="2"),
+            width="100%",
+            align="center",
+        ),
+        *filhos,
+        spacing="1",
+        padding="1rem",
+        background=PRETO_CARTAO,
+        border=f"1px solid {BORDA}",
+        border_radius="0.75rem",
+        width="100%",
+        align="start",
+    )
+
+
 def dashboard_page() -> rx.Component:
+    D = DashboardState
     return page(
-        _secao(
-            "MOTOS DA LOJA",
-            rx.grid(
-                _cartao("Motos em estoque", DashboardState.motos_em_estoque, "bike", href="/motos-loja"),
-                _cartao("Valor do estoque", rx.text("R$ ", DashboardState.valor_estoque_motos), "gem", href="/motos-loja"),
-                _cartao("Vendidas no mês", DashboardState.motos_vendidas_mes, "badge-dollar-sign", href="/motos-loja"),
-                columns=rx.breakpoints(initial="1", sm="3"),
-                spacing="4",
-                width="100%",
-            ),
-        ),
-        _secao(
-            "FATURAMENTO",
-            rx.grid(
-                _cartao("Faturamento de hoje", rx.text("R$ ", DashboardState.faturamento_hoje), "wallet", href="/vendas"),
-                _cartao("Faturamento do mês", rx.text("R$ ", DashboardState.faturamento_mes), "chart-line", href="/vendas"),
-                columns=rx.breakpoints(initial="1", xs="2"),
-                spacing="4",
-                width="100%",
-            ),
-            _grafico_faturamento(),
-        ),
-        _secao(
-            "LOJA E OFICINA",
-            rx.grid(
-                _cartao("Produtos cadastrados", DashboardState.total_produtos, "package", href="/produtos"),
-                _cartao(
-                    "Estoque baixo (≤ 5 un.)",
-                    DashboardState.produtos_estoque_baixo,
-                    "triangle-alert",
-                    alerta=True,
-                    href="/produtos",
+        rx.cond(
+            AuthState.eh_admin & (D.recursos_pendentes > 0),
+            rx.callout.root(
+                rx.callout.icon(rx.icon("sparkles", size=18)),
+                rx.callout.text(
+                    "O sistema ganhou novidades. ", D.recursos_pendentes,
+                    " recurso(s) já estão prontos e só aguardam tabelas/campos no Xano. ",
+                    rx.link("Ver o que mudou e o passo a passo", href="/configuracao"),
                 ),
-                _cartao("Clientes cadastrados", DashboardState.total_clientes, "users", href="/clientes"),
-                _cartao("OS em aberto", DashboardState.os_em_aberto, "wrench", href="/ordens-servico"),
+                color_scheme="orange",
+                width="100%",
+            ),
+        ),
+        _secao(
+            "ATENDIMENTO",
+            rx.grid(
+                _cartao("Clientes", D.total_clientes, "users", href="/clientes"),
+                _cartao("Clientes novos no mês", D.clientes_novos_mes, "user-plus", href="/clientes"),
+                _cartao("Leads novos", D.leads_novos, "user-search", href="/leads"),
+                _cartao("Leads em atendimento", D.leads_abertos, "messages-square", href="/leads"),
                 columns=rx.breakpoints(initial="2", md="4"),
                 spacing="4",
                 width="100%",
             ),
         ),
         _secao(
-            "ATIVIDADE RECENTE",
-            rx.table.root(
+            "VENDAS E FATURAMENTO",
+            rx.grid(
+                _cartao("Faturamento de hoje", rx.text("R$ ", D.faturamento_hoje), "wallet", href="/vendas"),
+                _cartao("Faturamento do mês", rx.text("R$ ", D.faturamento_mes), "chart-line", href="/vendas"),
+                _cartao("Vendas no mês", D.vendas_mes, "shopping-cart", href="/vendas"),
+                _cartao("Ticket médio do mês", rx.text("R$ ", D.ticket_medio_mes), "receipt", href="/vendas"),
+                columns=rx.breakpoints(initial="2", md="4"),
+                spacing="4",
+                width="100%",
+            ),
+            _grafico_faturamento(),
+        ),
+        _secao(
+            "MOTOS DA LOJA",
+            rx.grid(
+                _cartao("Motos disponíveis", D.motos_disponiveis, "bike", href="/motos-loja"),
+                _cartao("Valor das disponíveis", rx.text("R$ ", D.valor_estoque_motos), "gem", href="/motos-loja"),
+                _cartao("Vendidas no mês", D.motos_vendidas_mes, "badge-dollar-sign", href="/motos-loja"),
+                _cartao("Vendidas (total)", D.motos_vendidas_total, "trophy", href="/motos-loja"),
+                columns=rx.breakpoints(initial="2", md="4"),
+                spacing="4",
+                width="100%",
+            ),
+        ),
+        _secao(
+            "ESTOQUE E OFICINA",
+            rx.grid(
+                _cartao("Produtos ativos", D.total_produtos, "package", href="/produtos"),
+                _cartao("Produtos com estoque", D.produtos_em_estoque, "boxes", href="/produtos"),
+                _cartao("Estoque baixo", D.produtos_estoque_baixo, "triangle-alert", alerta=True, href="/produtos"),
+                _cartao("OS em aberto", D.os_em_aberto, "wrench", href="/ordens-servico"),
+                columns=rx.breakpoints(initial="2", md="4"),
+                spacing="4",
+                width="100%",
+            ),
+        ),
+        rx.grid(
+            _quadro("Vendas recentes", "/vendas",
+                    rx.cond(D.vendas_recentes.length() > 0, rx.foreach(D.vendas_recentes, _venda_recente),
+                            rx.text("Nenhuma venda ainda.", size="2", color=TEXTO_SECUNDARIO))),
+            _quadro("Leads recentes", "/leads",
+                    rx.cond(D.tem_leads,
+                            rx.cond(D.leads_recentes.length() > 0, rx.foreach(D.leads_recentes, _lead_recente),
+                                    rx.text("Nenhum lead cadastrado.", size="2", color=TEXTO_SECUNDARIO)),
+                            rx.text("Aguardando a tabela leads no Xano.", size="2", color=TEXTO_SECUNDARIO))),
+            columns=rx.breakpoints(initial="1", md="2"),
+            spacing="4",
+            width="100%",
+        ),
+        _secao(
+            "MOVIMENTO RECENTE (VENDAS E COMPRAS)",
+            rx.box(rx.table.root(
                 rx.table.header(
                     rx.table.row(
                         rx.table.column_header_cell("Data"),
@@ -159,7 +256,7 @@ def dashboard_page() -> rx.Component:
                 rx.table.body(rx.foreach(DashboardState.atividades_recentes, _linha_atividade)),
                 width="100%",
                 variant="surface",
-            ),
+            ), width="100%", overflow_x="auto"),
         ),
         title="Painel",
         subtitle="Visão geral da loja, da oficina e do estoque de motos.",

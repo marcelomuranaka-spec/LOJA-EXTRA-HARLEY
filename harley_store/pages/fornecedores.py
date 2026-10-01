@@ -55,6 +55,7 @@ def _formulario() -> rx.Component:
                     width="220px",
                 ),
                 spacing="3",
+                flex_wrap="wrap",
                 width="100%",
             ),
             rx.input(
@@ -73,8 +74,10 @@ def _formulario() -> rx.Component:
                     on_click=FornecedoresState.novo,
                 ),
                 spacing="3",
+                flex_wrap="wrap",
             ),
             spacing="3",
+            flex_wrap="wrap",
             align="start",
             width="100%",
         ),

@@ -102,3 +102,44 @@ async def movimentar(ajustes: dict[int, int]) -> None:
     finally:
         for trava in reversed(travas):
             trava.release()
+
+
+async def _com_trava(produto_id: int):
+    trava = _travas.setdefault(int(produto_id), asyncio.Lock())
+    await trava.acquire()
+    return trava
+
+
+async def editar_produto(produto_id: int, alteracoes: dict) -> dict:
+    """Altera o cadastro de um produto (nome, preço, categoria...) SEM mexer no
+    saldo: relê o produto com a trava na mão e regrava o registro completo
+    com o saldo atual. Assim uma venda feita enquanto o formulário estava
+    aberto não é desfeita ao salvar."""
+    alteracoes = {k: v for k, v in alteracoes.items() if k not in ("id", "estoque_qtd")}
+    trava = await _com_trava(produto_id)
+    try:
+        produto = await _ler_produto(int(produto_id))
+        if produto is None:
+            raise ProdutoInexistente(f"Produto {produto_id} não existe mais.")
+        dados = {k: v for k, v in produto.items() if k != "id"}
+        dados.update(alteracoes)
+        return await xano.atualizar(TABELA_PRODUTOS, int(produto_id), dados)
+    finally:
+        trava.release()
+
+
+async def definir_saldo(produto_id: int, novo_saldo: int) -> tuple[int, int]:
+    """Correção de inventário: põe o saldo num valor exato. Devolve
+    (saldo anterior, saldo novo). Levanta ValueError se negativo."""
+    if int(novo_saldo) < 0:
+        raise ValueError("O estoque não pode ficar negativo.")
+    trava = await _com_trava(produto_id)
+    try:
+        produto = await _ler_produto(int(produto_id))
+        if produto is None:
+            raise ProdutoInexistente(f"Produto {produto_id} não existe mais.")
+        anterior = int(produto.get("estoque_qtd") or 0)
+        await _gravar_estoque(produto, int(novo_saldo))
+        return anterior, int(novo_saldo)
+    finally:
+        trava.release()

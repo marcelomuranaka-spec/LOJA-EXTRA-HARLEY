@@ -1,11 +1,15 @@
 """
-Cliente HTTP para o grupo "Authentication" do Xano (login e cadastro na
-tabela `user`).
+Cliente HTTP para o grupo "Authentication" do Xano (login e identidade de
+quem está logado, na tabela `user`).
 
 É um módulo separado de `xano_client.py` porque o grupo Authentication tem
 uma base URL própria (canonical diferente do grupo de CRUD genérico usado
 pelas outras tabelas do sistema). A lógica de retentativa em erro 429 é
 reaproveitada de `xano_client._request` em vez de duplicada aqui.
+
+Cadastro (`auth/signup`) e "esqueci minha senha" (`reset/*`) passaram a
+exigir login no Xano: contas novas e senhas são definidas pelo administrador
+na tela "Usuários do sistema" (ver `xano_admin_client.py`).
 """
 
 from __future__ import annotations
@@ -35,22 +39,19 @@ async def login(email: str, senha: str) -> dict:
     return await _post("auth/login", {"email": email, "password": senha})
 
 
-async def signup(nome: str, email: str, senha: str) -> dict:
-    """Retorna {"authToken", "user_id"}. Levanta XanoAuthError se o email já existe."""
-    return await _post("auth/signup", {"name": nome, "email": email, "password": senha})
+class SessaoInvalida(XanoAuthError):
+    """O Xano não reconhece o token (vencido, inventado ou conta excluída)."""
 
 
-async def redefinir_senha(email: str, nova_senha: str) -> None:
-    """"Esqueci minha senha" direto na tela de login, sem email de confirmação.
-
-    Reaproveita os dois endpoints de reset que já existem no Xano, em
-    sequência e só aqui no servidor (o código nunca vai para o navegador):
-    `reset/request-code` gera um código de uso único para o email e o
-    devolve, e `reset/confirm-code` usa esse código para gravar a nova senha.
-    Levanta XanoAuthError("No user found...") se o email não estiver cadastrado.
-    """
-    codigo = (await _post("reset/request-code", {"email": email}))["token"]
-    await _post(
-        "reset/confirm-code",
-        {"email": email, "code": codigo, "password": nova_senha, "confirm_password": nova_senha},
+async def quem_sou(token: str) -> dict:
+    """{"id", "name", "email", "role", ...} da conta dona do token, conferido
+    no Xano (`auth/me`). É a única fonte confiável de quem está logado e do
+    perfil dela: cookies podem ser inventados no navegador.
+    Levanta SessaoInvalida se o Xano recusar o token."""
+    resposta = await xano_client._request(
+        "GET", f"{BASE_URL}/auth/me", headers={"Authorization": f"Bearer {token}"}
     )
+    if resposta.status_code in (401, 403, 404):
+        raise SessaoInvalida("Sessão inválida ou vencida.")
+    resposta.raise_for_status()
+    return resposta.json()

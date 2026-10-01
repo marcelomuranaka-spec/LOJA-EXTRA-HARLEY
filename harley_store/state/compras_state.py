@@ -79,16 +79,16 @@ class ComprasState(rx.State):
     @rx.event
     def adicionar_item(self):
         if not self.item_produto_selecionado:
-            return rx.window_alert("Cadastre um produto antes de lançar uma compra.")
+            return rx.toast.error("Cadastre um produto antes de lançar uma compra.")
         try:
             quantidade = int(self.item_quantidade or 0)
             valor_unitario = float(str(self.item_valor_unitario).replace(",", "."))
         except ValueError:
-            return rx.window_alert("Quantidade e valor unitário precisam ser números válidos.")
+            return rx.toast.error("Quantidade e valor unitário precisam ser números válidos.")
         if quantidade <= 0:
-            return rx.window_alert("Quantidade precisa ser maior que zero.")
+            return rx.toast.error("Quantidade precisa ser maior que zero.")
         if valor_unitario < 0:
-            return rx.window_alert("Valor unitário não pode ser negativo.")
+            return rx.toast.error("Valor unitário não pode ser negativo.")
 
         produto_id, produto_nome = self.item_produto_selecionado.split(" - ", 1)
         self.itens_atual = self.itens_atual + [
@@ -110,9 +110,9 @@ class ComprasState(rx.State):
     @rx.event
     async def finalizar_compra(self):
         if not self.fornecedor_selecionado:
-            return rx.window_alert("Selecione o fornecedor.")
+            return rx.toast.error("Selecione o fornecedor.")
         if not self.itens_atual:
-            return rx.window_alert("Adicione ao menos um item à compra.")
+            return rx.toast.error("Adicione ao menos um item à compra.")
 
         id_fornecedor = int(self.fornecedor_selecionado.split(" - ")[0])
         total = sum(float(item["subtotal"]) for item in self.itens_atual)
@@ -151,11 +151,12 @@ class ComprasState(rx.State):
             await estoque.movimentar(entradas_estoque)
         except Exception:
             await self.carregar()
-            return rx.window_alert(
+            return rx.toast.error(
                 f"Compra nº {entrada['id']} registrada, mas o estoque não pôde ser atualizado. "
                 "Ajuste as quantidades na página Produtos."
             )
         await self.carregar()
+        return rx.toast.success(f"Compra nº {entrada['id']} registrada e estoque atualizado.")
 
     @rx.event
     async def excluir_entrada(self, entrada_id: str):

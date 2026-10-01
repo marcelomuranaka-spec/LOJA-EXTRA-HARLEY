@@ -17,6 +17,7 @@ import datetime
 
 import reflex as rx
 
+from .. import motos_loja_servico
 from .. import xano_client as xano
 from ..vendas_servico import CAMPO_VENDA, esta_cancelada
 
@@ -270,7 +271,7 @@ class ImpressaoState(rx.State):
         self.grupo2 = _campos_cliente(cliente) if cliente else [["Cliente", "—"]]
         self.grupo3_titulo = "Negociação"
         self.grupo3 = [
-            ["Situação", _texto(moto.get("status"))],
+            ["Situação", motos_loja_servico.rotulo(moto)],
             ["Data da venda" if vendida else "Data de entrada",
              _data(moto.get("data_saida") if vendida else moto.get("data_entrada"))],
         ]

@@ -49,6 +49,7 @@ def _formulario() -> rx.Component:
                     width="100%",
                 ),
                 spacing="3",
+                flex_wrap="wrap",
                 width="100%",
             ),
             rx.hstack(
@@ -65,6 +66,7 @@ def _formulario() -> rx.Component:
                     width="100%",
                 ),
                 spacing="3",
+                flex_wrap="wrap",
                 width="100%",
             ),
             rx.hstack(
@@ -77,8 +79,10 @@ def _formulario() -> rx.Component:
                     on_click=FuncionariosState.novo,
                 ),
                 spacing="3",
+                flex_wrap="wrap",
             ),
             spacing="3",
+            flex_wrap="wrap",
             align="start",
             width="100%",
         ),

@@ -4,6 +4,7 @@ import asyncio
 
 import reflex as rx
 
+from .. import estoque
 from .. import xano_client as xano
 
 TABELA_OS = "ordens_servico"
@@ -84,16 +85,16 @@ class OrdensServicoState(rx.State):
     @rx.event
     def adicionar_item(self):
         if not self.item_produto_selecionado:
-            return rx.window_alert("Cadastre uma peça (produto) antes de lançar na OS.")
+            return rx.toast.error("Cadastre uma peça (produto) antes de lançar na OS.")
         try:
             quantidade = int(self.item_quantidade or 0)
             valor_total_item = float(str(self.item_valor_total).replace(",", "."))
         except ValueError:
-            return rx.window_alert("Quantidade e valor precisam ser números válidos.")
+            return rx.toast.error("Quantidade e valor precisam ser números válidos.")
         if quantidade <= 0:
-            return rx.window_alert("Quantidade precisa ser maior que zero.")
+            return rx.toast.error("Quantidade precisa ser maior que zero.")
         if valor_total_item < 0:
-            return rx.window_alert("Valor não pode ser negativo.")
+            return rx.toast.error("Valor não pode ser negativo.")
 
         produto_id, produto_nome = self.item_produto_selecionado.split(" - ", 1)
         self.itens_atual = self.itens_atual + [
@@ -114,44 +115,59 @@ class OrdensServicoState(rx.State):
     @rx.event
     async def abrir_os(self):
         if not self.moto_selecionada:
-            return rx.window_alert("Cadastre uma moto do cliente antes de abrir uma OS.")
+            return rx.toast.error("Cadastre uma moto do cliente antes de abrir uma OS.")
         if not self.mecanico_selecionado:
-            return rx.window_alert("Cadastre um funcionário do tipo MECANICO antes de abrir uma OS.")
+            return rx.toast.error("Cadastre um funcionário do tipo MECANICO antes de abrir uma OS.")
 
         id_moto = int(self.moto_selecionada.split(" - ")[0])
         id_mecanico = int(self.mecanico_selecionado.split(" - ")[0])
 
-        os_nova = await xano.criar(
-            TABELA_OS,
-            {
-                "id_moto_cliente": id_moto,
-                "id_funcionario": id_mecanico,
-                "data_abertura": xano.datetime_para_epoch_ms(),
-                "status": "ABERTA",
-            },
-        )
-
+        # 1) Baixa as peças com a trava de estoque (a mesma das vendas): tudo
+        #    ou nada, e recusa se faltar peça (antes o saldo virava 0 em silêncio).
+        baixas: dict[int, int] = {}
         for item in self.itens_atual:
-            produto_id = int(item["produto_id"])
-            quantidade = int(item["quantidade"])
-            valor_total_item = float(item["valor_total_item"])
+            pid = int(item["produto_id"])
+            baixas[pid] = baixas.get(pid, 0) - int(item["quantidade"])
+        try:
+            await estoque.movimentar(baixas)
+        except estoque.EstoqueInsuficiente as erro:
+            return rx.toast.error("Estoque insuficiente: " + ", ".join(erro.produtos) + ". Nada foi alterado.")
+        except Exception:
+            return rx.toast.error("Não foi possível conectar ao banco. Nada foi alterado; tente de novo.")
 
-            await xano.criar(
-                TABELA_ITENS,
+        # 2) Grava a OS e os itens; se falhar, devolve as peças ao estoque.
+        try:
+            os_nova = await xano.criar(
+                TABELA_OS,
                 {
-                    "id_os": os_nova["id"],
-                    "id_produto": produto_id,
-                    "quantidade": quantidade,
-                    "valor_total_item": valor_total_item,
+                    "id_moto_cliente": id_moto,
+                    "id_funcionario": id_mecanico,
+                    "data_abertura": xano.datetime_para_epoch_ms(),
+                    "status": "ABERTA",
                 },
             )
-            produto = await xano.buscar(TABELA_PRODUTOS, produto_id)
-            if produto is not None:
-                produto["estoque_qtd"] = max(0, produto["estoque_qtd"] - quantidade)
-                await xano.atualizar(TABELA_PRODUTOS, produto_id, {k: v for k, v in produto.items() if k != "id"})
+            for item in self.itens_atual:
+                await xano.criar(
+                    TABELA_ITENS,
+                    {
+                        "id_os": os_nova["id"],
+                        "id_produto": int(item["produto_id"]),
+                        "descricao": item.get("produto_nome") or "",
+                        "quantidade": int(item["quantidade"]),
+                        "valor_total_item": float(item["valor_total_item"]),
+                    },
+                )
+        except Exception:
+            try:
+                await estoque.movimentar({pid: -qtd for pid, qtd in baixas.items()})
+            except Exception:
+                pass
+            return rx.toast.error("A OS não pôde ser gravada (falha de conexão). As peças voltaram ao estoque; "
+                                  "confira a lista de OS e tente de novo.")
 
         self.itens_atual = []
         await self.carregar()
+        return rx.toast.success(f"OS nº {os_nova['id']} aberta.")
 
     @rx.event
     async def mudar_status(self, os_id: str, novo_status: str):

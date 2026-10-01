@@ -65,7 +65,7 @@ class FuncionariosState(rx.State):
         nome = self.nome_funcionario.strip()
         cargo = self.cargo.strip()
         if not nome or not cargo:
-            return rx.window_alert("Preencha nome e cargo do funcionário.")
+            return rx.toast.error("Preencha nome e cargo do funcionário.")
 
         dados = {
             "nome_funcionario": nome,
@@ -76,15 +76,17 @@ class FuncionariosState(rx.State):
         if self.form_id is None:
             await xano.criar(TABELA, dados)
         else:
-            await xano.atualizar(TABELA, self.form_id, dados)
+            await xano.atualizar_mesclando(TABELA, self.form_id, dados)
 
         self.novo()
         await self.carregar()
+        return rx.toast.success("Funcionário salvo.")
 
     @rx.event
     async def excluir(self, funcionario_id: str):
         encontrados = await integridade.dependentes(TABELA, int(funcionario_id))
         if encontrados:
-            return rx.window_alert(integridade.mensagem_bloqueio("este funcionário", encontrados))
+            return rx.toast.error(integridade.mensagem_bloqueio("este funcionário", encontrados))
         await xano.excluir(TABELA, int(funcionario_id))
         await self.carregar()
+        return rx.toast.success("Funcionário excluído.")

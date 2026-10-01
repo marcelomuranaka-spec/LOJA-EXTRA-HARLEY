@@ -105,10 +105,13 @@ class TestLeiturasDiretasComToken(BaseComRemendos):
         self.preparar(XanoFalso())
         self.assertEqual(await vendas_servico._ler_direto("itens_transacao"), [])
 
-    async def test_tela_de_usuarios_lista_com_token(self):
-        falso = self.preparar(XanoFalso())
-        self.assertEqual(await xano_admin_client.listar_usuarios(), [])
-        self.assertEqual(falso.pedidos[-1].headers["Authorization"], f"Bearer {TOKEN_1}")
+    async def test_tela_de_usuarios_usa_o_token_de_quem_esta_logado(self):
+        """O grupo Admin do Xano exige perfil admin: a chamada vai com o token
+        do administrador logado, não com o da conta de serviço."""
+        falso = self.preparar(XanoFalso(token_aceito="token-do-admin"))
+        self.assertEqual(await xano_admin_client.listar_usuarios("token-do-admin"), [])
+        self.assertEqual(falso.pedidos[-1].headers["Authorization"], "Bearer token-do-admin")
+        self.assertEqual(falso.logins, 0)
 
 
 class TestMovimentarEstoque(BaseComRemendos):

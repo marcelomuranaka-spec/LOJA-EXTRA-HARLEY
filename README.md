@@ -23,11 +23,28 @@ Transações (Vendas), Ordens de Serviço e Itens de Ordem de Serviço.
   tabela `motos` do Xano: marca, modelo, ano, cor, placa, chassi, km,
   status (Em estoque / Reservada / Consignada / Vendida), preços de
   compra e venda, datas de entrada/saída, cliente, observações e foto.
-- **Produtos** — catálogo e estoque, com aviso de estoque baixo (≤ 5 unidades).
-- **Clientes** e **Motos dos clientes** — cadastro e vínculo cliente → moto.
-- **Vendas / Balcão** — venda com **vários itens** (carrinho): produtos do
-  estoque (preço já preenchido e editável, para descontos) e itens avulsos
-  sem estoque (ex.: mão de obra). O estoque é baixado na hora, protegido
+- **Produtos** e **Categorias** — catálogo com foto, SKU, preço de custo,
+  estoque mínimo por produto (alerta de estoque baixo), ativo/inativo e
+  "Ajustar estoque" (entrada, saída ou contagem). O saldo só muda no servidor,
+  com trava: editar um produto nunca apaga uma venda feita ao mesmo tempo.
+- **Clientes** — pesquisa (nome, CPF/CNPJ, telefone, e-mail, cidade), filtros,
+  ordenação, paginação e a **ficha do cliente** (`/clientes/<id>`, visão 360º):
+  dados, motos, compras, ordens de serviço, orçamentos, interações, e-mails e
+  linha do tempo.
+- **Motos dos clientes** — sempre ligadas a um cliente, com foto; cadastradas
+  também direto na ficha do cliente.
+- **Leads** — funil (Novo → Em atendimento → Proposta enviada → Negociação →
+  Convertido/Perdido), interações e **conversão em cliente** sem duplicar
+  cadastro (se o CPF/CNPJ já existe, o lead só é ligado ao cliente).
+- **E-mails** — envio pelo SendGrid a partir da ficha do cliente ou do lead
+  (sempre por um clique) e histórico de envios.
+- **Perfis de acesso** — Administrador e Funcionário (ver "Perfis, contas e
+  senhas"). **Configuração do sistema** (só administradores): novidades,
+  recursos a ativar no Xano, formas de pagamento e SendGrid.
+- **Vendas / Balcão** — fluxo rápido: cliente (busca digitando), produtos,
+  **moto da loja** (passa a Vendida sozinha), itens avulsos sem estoque (ex.:
+  mão de obra), **desconto em R$ ou %**, subtotal/total, **forma de
+  pagamento** e comprovante. Venda com **vários itens** (carrinho): O estoque é baixado na hora, protegido
   contra vendas simultâneas do mesmo produto. Vendas **não são apagadas**:
   são **canceladas** (uma ou várias de uma vez, com motivo opcional),
   continuam no histórico como "Cancelada", saem do faturamento e devolvem
@@ -235,11 +252,23 @@ harley_store/
         ├── ...
 ```
 
+Regras de negócio que valem para mais de uma tela ficam em módulos de serviço
+na raiz do pacote: `clientes_servico.py`, `produtos_servico.py`,
+`vendas_servico.py`, `motos_loja_servico.py`, `leads_servico.py`,
+`email_servico.py`, `estoque.py` (trava de estoque), `integridade.py`
+(bloqueio de exclusão), `imagens.py`, `formatacao.py`, `recursos.py` e
+`seguranca.py`. Peças visuais comuns: `components/ui.py` (campos, linhas que
+quebram no celular, janelas, paginação), `components/foto.py`.
+
 Cada tela é **sempre** o par `state/algo_state.py` + `pages/algo.py`. O
 `state` guarda os dados carregados do banco e os métodos que salvam,
 editam e excluem; a `page` só desenha a tela e chama os métodos do state
 quando o usuário clica em algo. Separar assim é o que deixa fácil mexer
 numa tela sem quebrar as outras.
+
+> O banco de verdade é o **Xano** (API REST). O SQLite/`models.py`/Alembic
+> abaixo são legado do início do projeto: tabelas novas são criadas no painel
+> do Xano (ver docs/ATIVACAO_XANO.md), não com `reflex db`.
 
 ### Como alterar a estrutura do banco (adicionar/mudar uma tabela)
 
@@ -282,18 +311,30 @@ guardam só o valor total. Elas continuam aparecendo e podem ser canceladas,
 mas nesse caso nada volta ao estoque automaticamente, porque não se sabe o
 que foi vendido; o sistema avisa para conferir o estoque manualmente.
 
-## Esqueci minha senha
+## Perfis, contas e senhas
 
-Na tela de login, **Esqueci minha senha** pede só o email cadastrado, a
-nova senha e a repetição dela. Não há email de confirmação: o servidor do
-app chama em sequência os endpoints `reset/request-code` e
-`reset/confirm-code` que já existem no Xano (ver
-`xano_auth_client.redefinir_senha`). O código de uso único nunca chega ao
-navegador.
+- Perfis (campo `role` da tabela `user` do Xano): **Administrador** (`admin`)
+  e **Funcionário** (`member`). O administrador vê o menu Administração:
+  **Usuários do sistema** (criar conta, "Tornar/Remover administrador",
+  "Definir senha", trocar e-mail, excluir) e **Configuração do sistema**.
+- O sistema sempre mantém pelo menos um administrador; ninguém exclui a
+  própria conta; a conta de serviço não pode ser excluída nem virar admin.
+- Não há mais "Criar conta" nem "Esqueci minha senha" na tela de login (o
+  Xano passou a exigir login nesses endpoints): quem precisa de acesso ou
+  esqueceu a senha fala com um administrador.
+- A sessão é **conferida no Xano** (`auth/me`) no login e a cada 10 minutos;
+  o perfil fica só no servidor. Toda ação de tela passa por
+  `harley_store/seguranca.py` (middleware): sem sessão válida, nada roda; as
+  telas de administração exigem perfil Administrador. As chamadas do grupo
+  Admin do Xano vão com o token do administrador logado (o próprio Xano
+  recusa contas Funcionário com 403).
 
-> ⚠️ Sem confirmação por email, **quem souber o email de uma conta pode
-> trocar a senha dela**. Serve para uso interno na loja; se o app ficar
-> acessível pela internet, vale voltar a exigir um código enviado por email.
+## Conta de serviço do servidor
+
+O servidor lê e grava as tabelas com a conta **Sistema Harley Store**
+(`sistema.harleystore@example.com`, perfil Funcionário), configurada no
+`.env` de cada pasta (desenvolvimento e produção). Para trocar a conta ou a
+senha: `.\scripts\configurar_xano.ps1`.
 
 ## Spinner de carregamento nos botões
 
@@ -303,6 +344,23 @@ página), aparece um spinner laranja no centro. Funciona em todas as telas,
 inclusive nas futuras, sem mexer em nenhuma delas: `assets/carregando.js`
 observa as mensagens do websocket do Reflex, e o visual fica em
 `assets/carregando.css`.
+
+## Recursos novos que dependem do Xano
+
+Vários recursos novos (campos extras de clientes e motos, categorias,
+formas de pagamento, leads, interações, histórico de e-mails) já estão
+prontos e **ligam sozinhos** quando as tabelas/campos forem criados no painel
+do Xano. Passo a passo em [docs/ATIVACAO_XANO.md](docs/ATIVACAO_XANO.md) e,
+ao vivo, na tela Configuração do sistema. A lista fica em
+`harley_store/recursos.py`.
+
+## Fotos (validação e onde ficam)
+
+`harley_store/imagens.py` aceita só PNG, JPG e WEBP de até 5 MB, confere
+os primeiros bytes do arquivo (não confia na extensão) e dá ao arquivo um
+nome aleatório. As fotos vão para o storage do Xano pelo endpoint
+`upload/image`; enquanto ele não existir, as de produtos e motos dos
+clientes ficam na pasta `uploaded_files/` do servidor (só naquele ambiente).
 
 ## Fotos das motos da loja (endpoint `upload/image` no Xano)
 

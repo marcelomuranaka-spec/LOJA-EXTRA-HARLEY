@@ -6,21 +6,30 @@ Para adicionar uma página nova:
     1. crie `state/minha_pagina_state.py` e `pages/minha_pagina.py`
     2. importe a função da página aqui embaixo
     3. adicione uma linha em `app.add_page(...)` — toda página que exige
-       login deve incluir `AuthState.exigir_login` como PRIMEIRO item da
-       lista de `on_load` (veja os exemplos abaixo).
-    4. adicione o link em `components/layout.py` (MENU_ITEMS)
+       login deve incluir `AuthState.exigir_login` (ou `exigir_admin`, nas
+       telas de administração) como PRIMEIRO item da lista de `on_load`.
+    4. adicione o link em `components/layout.py` (MENU_GRUPOS ou MENU_ADMIN)
+
+As ações das telas são conferidas no servidor por `seguranca.py`: todo state
+em `state/` exige sessão válida; os listados em `seguranca.registrar(...)`
+exigem perfil Administrador.
 """
 
 import reflex as rx
 
-from . import xano_client
+from . import seguranca, xano_client
+from .pages.categorias import categorias_page
+from .pages.cliente_detalhe import cliente_detalhe_page
 from .pages.clientes import clientes_page
 from .pages.compras import compras_page
+from .pages.configuracao import configuracao_page
 from .pages.dashboard import dashboard_page
+from .pages.emails import emails_page
 from .pages.fornecedores import fornecedores_page
 from .pages.funcionarios import funcionarios_page
 from .pages.impressao import impressao_page
 from .pages.inicio import inicio_page
+from .pages.leads import leads_page
 from .pages.login import login_page
 from .pages.motos import motos_page
 from .pages.motos_loja import motos_loja_page
@@ -29,11 +38,16 @@ from .pages.produtos import produtos_page
 from .pages.usuarios import usuarios_page
 from .pages.vendas import vendas_page
 from .state.auth_state import AuthState
+from .state.categorias_state import CategoriasState
+from .state.cliente_detalhe_state import ClienteDetalheState
 from .state.clientes_state import ClientesState
 from .state.compras_state import ComprasState
+from .state.configuracao_state import ConfiguracaoState
 from .state.dashboard_state import DashboardState
+from .state.emails_state import EmailsState
 from .state.fornecedores_state import FornecedoresState
 from .state.impressao_state import ImpressaoState
+from .state.leads_state import LeadsState
 from .state.funcionarios_state import FuncionariosState
 from .state.motos_loja_state import MotosLojaState
 from .state.motos_state import MotosState
@@ -67,6 +81,9 @@ app = rx.App(
     stylesheets=["/carregando.css"],
 )
 
+# Confere a sessão (e o perfil, nas telas de administração) em cada ação.
+seguranca.registrar(app, UsuariosState, ConfiguracaoState)
+
 # Mantém as tabelas do Xano sempre em cache no servidor: as telas abrem sem
 # esperar o Xano e sem esbarrar no limite de requisições do plano Free.
 app.register_lifespan_task(xano_client.manter_cache_aquecido)
@@ -92,7 +109,7 @@ app.add_page(
     motos_loja_page,
     route="/motos-loja",
     title="Motos da loja — Harley Store",
-    on_load=[AuthState.exigir_login, MotosLojaState.carregar, MotosLojaState.novo],
+    on_load=[AuthState.exigir_login, MotosLojaState.carregar],
 )
 app.add_page(
     produtos_page,
@@ -101,10 +118,22 @@ app.add_page(
     on_load=[AuthState.exigir_login, ProdutosState.carregar],
 )
 app.add_page(
+    categorias_page,
+    route="/categorias",
+    title="Categorias — Harley Store",
+    on_load=[AuthState.exigir_login, CategoriasState.carregar],
+)
+app.add_page(
     clientes_page,
     route="/clientes",
     title="Clientes — Harley Store",
     on_load=[AuthState.exigir_login, ClientesState.carregar],
+)
+app.add_page(
+    cliente_detalhe_page,
+    route="/clientes/[cliente_id]",
+    title="Ficha do cliente — Harley Store",
+    on_load=[AuthState.exigir_login, ClienteDetalheState.carregar],
 )
 app.add_page(
     motos_page,
@@ -143,10 +172,28 @@ app.add_page(
     on_load=[AuthState.exigir_login, FuncionariosState.carregar],
 )
 app.add_page(
+    leads_page,
+    route="/leads",
+    title="Leads — Harley Store",
+    on_load=[AuthState.exigir_login, LeadsState.carregar],
+)
+app.add_page(
+    emails_page,
+    route="/emails",
+    title="E-mails — Harley Store",
+    on_load=[AuthState.exigir_login, EmailsState.carregar],
+)
+app.add_page(
+    configuracao_page,
+    route="/configuracao",
+    title="Configuração — Harley Store",
+    on_load=[AuthState.exigir_admin, ConfiguracaoState.carregar],
+)
+app.add_page(
     usuarios_page,
     route="/usuarios",
     title="Usuários — Harley Store",
-    on_load=[AuthState.exigir_login, UsuariosState.carregar],
+    on_load=[AuthState.exigir_admin, UsuariosState.carregar],
 )
 # Documentos para impressão (venda, os, compra, moto) — abrem em nova aba.
 app.add_page(

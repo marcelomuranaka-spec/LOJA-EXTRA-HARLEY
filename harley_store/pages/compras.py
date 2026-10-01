@@ -91,6 +91,7 @@ def _formulario() -> rx.Component:
                     flex_shrink="0",
                 ),
                 spacing="3",
+                flex_wrap="wrap",
                 width="100%",
             ),
             rx.cond(
@@ -117,6 +118,7 @@ def _formulario() -> rx.Component:
                     ),
                     width="100%",
                     spacing="3",
+                    flex_wrap="wrap",
                 ),
             ),
             rx.button(
@@ -126,6 +128,7 @@ def _formulario() -> rx.Component:
                 size="3",
             ),
             spacing="3",
+            flex_wrap="wrap",
             align="start",
             width="100%",
         ),

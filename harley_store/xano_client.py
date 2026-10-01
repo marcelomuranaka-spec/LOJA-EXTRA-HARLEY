@@ -107,18 +107,33 @@ class XanoSemLogin(Exception):
     """Conta de serviço do Xano não configurada ou recusada no login."""
 
 
-def _credenciais() -> tuple[str, str]:
+def ler_env() -> dict[str, str]:
+    """Linhas CHAVE=valor do .env da raiz (segredos do servidor, fora do git)."""
     valores = {}
     if _ARQUIVO_ENV.exists():
         for linha in _ARQUIVO_ENV.read_text(encoding="utf-8-sig").splitlines():
             chave, igual, valor = linha.partition("=")
             if igual and not chave.strip().startswith("#"):
                 valores[chave.strip()] = valor.strip().strip("'\"")
+    return valores
+
+
+def _credenciais() -> tuple[str, str]:
+    valores = ler_env()
     email = os.environ.get("XANO_EMAIL") or valores.get("XANO_EMAIL", "")
     senha = os.environ.get("XANO_SENHA") or valores.get("XANO_SENHA", "")
     if not email or not senha:
         raise XanoSemLogin(f"Defina XANO_EMAIL e XANO_SENHA em {_ARQUIVO_ENV}")
     return email, senha
+
+
+def email_conta_servico() -> str:
+    """E-mail da conta de serviço (para a tela de usuários protegê-la); "" se
+    não configurada."""
+    try:
+        return _credenciais()[0].strip().lower()
+    except XanoSemLogin:
+        return ""
 
 
 async def _obter_token(vencido: str | None = None) -> str:
@@ -165,11 +180,43 @@ def limpar_cache(tabela: str | None = None) -> None:
         _cache.pop(tabela, None)
 
 
+class TabelaInexistente(Exception):
+    """A tabela (ou os endpoints de CRUD dela) ainda não existe no Xano."""
+
+
+# Tabelas que responderam 404: não pergunta de novo por _AUSENTE_SEGUNDOS
+# (cada tela que usa um recurso ainda não ativado não gasta requisição).
+_AUSENTE_SEGUNDOS = 300.0
+_ausentes: dict[str, float] = {}
+
+
+def _conferir_ausente(tabela: str) -> None:
+    quando = _ausentes.get(tabela)
+    if quando is not None and time.monotonic() - quando < _AUSENTE_SEGUNDOS:
+        raise TabelaInexistente(tabela)
+
+
+def esquecer_ausencias() -> None:
+    """Depois de criar tabelas no Xano: confere de novo na próxima leitura."""
+    _ausentes.clear()
+
+
+async def _buscar_tabela(tabela: str) -> list[dict]:
+    resposta = await _request_xano("GET", f"{BASE_URL}/{tabela}")
+    if resposta.status_code == 404:
+        _ausentes[tabela] = time.monotonic()
+        raise TabelaInexistente(tabela)
+    resposta.raise_for_status()
+    _ausentes.pop(tabela, None)
+    return resposta.json() or []
+
+
 async def listar(tabela: str) -> list[dict]:
     # Devolve sempre uma CÓPIA: quem chama pode alterar os dicts à vontade.
     guardado = _cache.get(tabela)
     if guardado and time.monotonic() - guardado[0] < _CACHE_SEGUNDOS:
         return copy.deepcopy(guardado[1])
+    _conferir_ausente(tabela)
     # A trava evita que várias telas pedindo a mesma tabela ao mesmo tempo
     # façam várias chamadas iguais ao Xano.
     trava = _travas.setdefault(tabela, asyncio.Lock())
@@ -177,18 +224,33 @@ async def listar(tabela: str) -> list[dict]:
         guardado = _cache.get(tabela)
         if guardado and time.monotonic() - guardado[0] < _CACHE_SEGUNDOS:
             return copy.deepcopy(guardado[1])
-        resposta = await _request_xano("GET", f"{BASE_URL}/{tabela}")
-        resposta.raise_for_status()
-        dados = resposta.json() or []
+        dados = await _buscar_tabela(tabela)
         _cache[tabela] = (time.monotonic(), dados)
         return copy.deepcopy(dados)
 
 
+async def listar_se_existir(tabela: str) -> list[dict] | None:
+    """None se a tabela ainda não existe no Xano (recurso não ativado)."""
+    try:
+        return await listar(tabela)
+    except TabelaInexistente:
+        return None
+
+
+async def campos(tabela: str) -> set[str] | None:
+    """Campos que a tabela tem hoje no Xano (o Xano devolve todos os campos
+    em cada registro, mesmo vazios). None se a tabela não existe; conjunto
+    vazio se ela existe mas não tem registros (não dá para saber)."""
+    registros = await listar_se_existir(tabela)
+    if registros is None:
+        return None
+    return {chave for registro in registros for chave in registro}
+
+
 async def _renovar(tabela: str) -> None:
+    _conferir_ausente(tabela)
     async with _travas.setdefault(tabela, asyncio.Lock()):
-        resposta = await _request_xano("GET", f"{BASE_URL}/{tabela}")
-        resposta.raise_for_status()
-        _cache[tabela] = (time.monotonic(), resposta.json() or [])
+        _cache[tabela] = (time.monotonic(), await _buscar_tabela(tabela))
 
 
 # Tabelas usadas pelas telas. Mantidas sempre em cache por manter_cache_aquecido.
@@ -196,6 +258,8 @@ TABELAS_AQUECIDAS = [
     "clientes", "produtos", "motos", "motos_clientes", "funcionarios", "fornecedores",
     "transacoes", "itens_transacao", "ordens_servico", "itens_ordem_servico",
     "entrada_mercadoria", "itens_compra_estoque",
+    # tabelas novas (enquanto não existirem no Xano, são puladas sem requisição)
+    "categorias", "formas_pagamento", "leads", "interacoes", "emails",
 ]
 
 
@@ -204,9 +268,10 @@ async def manter_cache_aquecido() -> None:
     tabelas sempre no cache, para que nenhuma tela precise esperar o Xano.
 
     Primeira passada rápida ao subir (1 tabela a cada 3 s); depois renova uma
-    tabela a cada 20 s, ou seja, cada tabela a cada ~3,7 min, antes de vencer o
-    cache de 5 min. É 1 requisição a cada 20 s, bem abaixo do limite do plano
-    Free (~10 a cada 20 s), então sobra folga para as gravações."""
+    tabela a cada 15 s, ou seja, cada uma das 17 tabelas a cada ~4,3 min, antes
+    de vencer o cache de 5 min. É no máximo 1 requisição a cada 15 s, bem abaixo
+    do limite do plano Free (~10 a cada 20 s), então sobra folga para as
+    gravações. Tabela que ainda não existe no Xano não gasta requisição."""
     espera = 3.0
     while True:
         for tabela in TABELAS_AQUECIDAS:
@@ -214,10 +279,12 @@ async def manter_cache_aquecido() -> None:
                 await _renovar(tabela)
             except asyncio.CancelledError:
                 raise
+            except TabelaInexistente:
+                continue  # recurso ainda não ativado: sem espera, sem requisição
             except Exception:
                 pass  # sem internet/Xano fora: tenta de novo na próxima volta
             await asyncio.sleep(espera)
-        espera = 20.0
+        espera = 15.0
 
 
 async def buscar(tabela: str, registro_id: int) -> dict | None:
@@ -248,8 +315,12 @@ def _aplicar_no_cache(tabela: str, registro_id: int, registro: dict | None) -> N
 
 
 async def criar(tabela: str, dados: dict) -> dict:
+    _conferir_ausente(tabela)
     try:
         resposta = await _request_xano("POST", f"{BASE_URL}/{tabela}", json=dados)
+        if resposta.status_code == 404:
+            _ausentes[tabela] = time.monotonic()
+            raise TabelaInexistente(tabela)
         resposta.raise_for_status()
         registro = resposta.json()
         _aplicar_no_cache(tabela, int(registro["id"]), registro)
@@ -280,6 +351,49 @@ async def excluir(tabela: str, registro_id: int) -> None:
     except Exception:
         limpar_cache(tabela)
         raise
+
+
+async def ler_direto(tabela: str, registro_id: int) -> dict | None:
+    """Um registro lido direto do Xano, sem cache (dado atual)."""
+    resposta = await _request_xano("GET", f"{BASE_URL}/{tabela}/{int(registro_id)}")
+    if resposta.status_code == 404:
+        return None
+    resposta.raise_for_status()
+    return resposta.json()
+
+
+async def atualizar_mesclando(tabela: str, registro_id: int, alteracoes: dict) -> dict:
+    """PATCH seguro: o PATCH do Xano substitui o registro inteiro (campo não
+    enviado volta vazio). Aqui o registro atual é relido do Xano e só os
+    campos de `alteracoes` mudam: campos que o app não conhece (ex.: criados
+    depois no painel) são preservados."""
+    atual = await ler_direto(tabela, registro_id)
+    if atual is None:
+        raise LookupError(f"Registro {registro_id} de {tabela} não existe mais.")
+    dados = {k: v for k, v in atual.items() if k != "id"}
+    dados.update(alteracoes)
+    return await atualizar(tabela, registro_id, dados)
+
+
+def campos_nao_gravados(enviado: dict, devolvido: dict, nomes: list[str] | set[str]) -> list[str]:
+    """Campos novos que foram enviados com valor e voltaram diferentes: sinal
+    de que o endpoint do Xano ainda não tem esse campo nos inputs."""
+    faltando = []
+    for nome in nomes:
+        valor = enviado.get(nome)
+        if valor in (None, "", 0, False):
+            continue
+        voltou = devolvido.get(nome)
+        if isinstance(valor, (int, float)) and not isinstance(valor, bool):
+            try:
+                igual = abs(float(voltou or 0) - float(valor)) < 0.005
+            except (TypeError, ValueError):
+                igual = False
+        else:
+            igual = str(voltou or "").strip().lower() == str(valor).strip().lower()
+        if not igual:
+            faltando.append(nome)
+    return faltando
 
 
 class UploadIndisponivel(Exception):

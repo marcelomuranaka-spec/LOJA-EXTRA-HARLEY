@@ -13,6 +13,16 @@ Tabelas no Xano:
   quantidade, valor_unitario. Os nomes seguem a convenção do projeto
   (xano/knowledge/agents.md: chave estrangeira com sufixo _id). ATENÇÃO: o Xano
   ignora em silêncio um campo com nome errado, gravando 0; use as constantes.
+
+Balcão completo (ver recursos.py, requisito "transacoes"):
+- desconto: vira um item "Desconto" de valor negativo, então a soma dos
+  itens é sempre o total (comprovante e relatórios batem); com o campo
+  `transacoes.desconto`, o valor também fica gravado nele;
+- moto da loja: vira um item avulso com a descrição da moto, e a moto passa
+  a "Vendida" para o cliente (motos_loja_servico); com o campo
+  `transacoes.moto_id`, o cancelamento devolve a moto ao estoque;
+- `forma_pagamento` e `usuario_id` (quem registrou) são gravados quando os
+  campos existem no Xano.
 """
 
 from __future__ import annotations
@@ -20,6 +30,7 @@ from __future__ import annotations
 import asyncio
 
 from . import estoque
+from . import motos_loja_servico as motos_loja
 from . import xano_client as xano
 
 TABELA = "transacoes"
@@ -63,6 +74,13 @@ async def _itens_da_venda(venda_id: int, venda_nova: bool = False) -> list[dict]
     return itens
 
 
+async def _itens_cache(venda_id: int) -> list[dict]:
+    try:
+        return [i for i in await xano.listar(TABELA_ITENS) if int(i.get(CAMPO_VENDA) or 0) == venda_id]
+    except Exception:
+        return []
+
+
 async def _marcar_cancelada(venda: dict, motivo: str) -> None:
     dados = {k: v for k, v in venda.items() if k != "id"}  # PATCH do Xano exige o registro completo
     dados["status"] = STATUS_CANCELADA
@@ -74,18 +92,30 @@ async def _marcar_cancelada(venda: dict, motivo: str) -> None:
 # ---------------------------------------------------------------- registro
 
 async def registrar_venda(
-    tipo: str, id_funcionario: int, id_cliente: int, id_moto: int, itens: list[dict]
+    tipo: str, id_funcionario: int, id_cliente: int, id_moto: int, itens: list[dict], *,
+    desconto: float = 0.0, forma_pagamento: str = "", usuario_id: int = 0,
+    moto_loja: dict | None = None, campos_venda: set[str] | frozenset[str] = frozenset(),
 ) -> int:
     """itens: [{id_produto (0 = avulso), descricao, quantidade, valor_unitario}].
+    moto_loja: {"id", "valor"} da moto da loja vendida (opcional).
+    campos_venda: campos novos que já existem em `transacoes` no Xano.
     Devolve o id da venda. Levanta FalhaVenda com mensagem para o usuário."""
-    if not itens:
+    itens = list(itens)
+    if not itens and not moto_loja:
         raise FalhaVenda("Adicione ao menos um item à venda.")
+    if moto_loja and not int(id_cliente or 0):
+        raise FalhaVenda("Para vender uma moto da loja, escolha o cliente.")
 
     baixas: dict[int, int] = {}
     for item in itens:
         if int(item["id_produto"]):
             baixas[int(item["id_produto"])] = baixas.get(int(item["id_produto"]), 0) - int(item["quantidade"])
-    total = round(sum(int(i["quantidade"]) * float(i["valor_unitario"]) for i in itens), 2)
+    subtotal = round(sum(int(i["quantidade"]) * float(i["valor_unitario"]) for i in itens)
+                     + (float(moto_loja["valor"]) if moto_loja else 0), 2)
+    desconto = round(float(desconto or 0), 2)
+    if desconto < 0 or desconto > subtotal:
+        raise FalhaVenda("O desconto precisa ficar entre zero e o subtotal da venda.")
+    total = round(subtotal - desconto, 2)
 
     # 1) baixa todo o estoque, ou nada
     try:
@@ -99,24 +129,60 @@ async def registrar_venda(
 
     devolucao = {pid: -qtd for pid, qtd in baixas.items()}
 
-    # 2) cria a venda ativa
-    try:
-        venda = await xano.criar(TABELA, {
-            "tipo_transacao": tipo,
-            "id_funcionario": id_funcionario,
-            "id_cliente": id_cliente,
-            "id_moto_cliente": id_moto,
-            "data_transacao": xano.datetime_para_epoch_ms(),
-            "valor_total": total,
-            "status": STATUS_ATIVA,
-            "data_cancelamento": None,
-            "motivo_cancelamento": None,
+    # 2) moto da loja: passa a Vendida (com trava; só uma venda leva a moto)
+    moto_anterior = None
+    if moto_loja:
+        try:
+            moto_anterior = await motos_loja.marcar_vendida(int(moto_loja["id"]), int(id_cliente))
+        except motos_loja.MotoIndisponivel as erro:
+            await _devolver_sem_falhar(devolucao)
+            raise FalhaVenda(f"{erro} Nada foi alterado.")
+        except Exception:
+            await _devolver_sem_falhar(devolucao)
+            raise FalhaVenda("Não foi possível reservar a moto (falha de conexão). Nada foi alterado; tente de novo.")
+        itens.append({
+            "id_produto": 0,
+            "descricao": "Moto: " + motos_loja.descricao(moto_anterior),
+            "quantidade": 1,
+            "valor_unitario": float(moto_loja["valor"]),
         })
-    except Exception:
+    if desconto:
+        itens.append({"id_produto": 0, "descricao": "Desconto", "quantidade": 1, "valor_unitario": -desconto})
+
+    async def desfazer_tudo():
         await _devolver_sem_falhar(devolucao)
+        if moto_anterior is not None:
+            try:
+                await motos_loja.desfazer(int(moto_loja["id"]), moto_anterior)
+            except Exception:
+                pass
+
+    # 3) cria a venda ativa
+    cabecalho = {
+        "tipo_transacao": tipo,
+        "id_funcionario": id_funcionario,
+        "id_cliente": id_cliente,
+        "id_moto_cliente": id_moto,
+        "data_transacao": xano.datetime_para_epoch_ms(),
+        "valor_total": total,
+        "status": STATUS_ATIVA,
+        "data_cancelamento": None,
+        "motivo_cancelamento": None,
+    }
+    extras = {
+        "desconto": desconto,
+        "forma_pagamento": (forma_pagamento or "").strip() or None,
+        "usuario_id": int(usuario_id or 0),
+        "moto_id": int(moto_loja["id"]) if moto_loja else 0,
+    }
+    cabecalho.update({k: v for k, v in extras.items() if k in campos_venda})
+    try:
+        venda = await xano.criar(TABELA, cabecalho)
+    except Exception:
+        await desfazer_tudo()
         raise FalhaVenda("A venda não pôde ser registrada (falha de conexão). O estoque foi devolvido; tente de novo.")
 
-    # 3) grava os itens
+    # 4) grava os itens
     try:
         for item in itens:
             gravado = await xano.criar(TABELA_ITENS, {
@@ -131,7 +197,7 @@ async def registrar_venda(
             if int(gravado.get(CAMPO_VENDA) or 0) != int(venda["id"]):
                 raise RuntimeError(f"item gravado sem vínculo com a venda ({CAMPO_VENDA})")
     except Exception:
-        await _devolver_sem_falhar(devolucao)
+        await desfazer_tudo()
         try:
             await _marcar_cancelada(venda, MOTIVO_FALHA)
         except Exception:
@@ -172,6 +238,15 @@ async def cancelar_venda(venda_id: int, motivo: str = "") -> dict:
         except Exception:
             return {"situacao": "erro", "mensagem": f"Venda nº {venda_id}: falha de conexão, nada foi alterado."}
 
+        aviso_moto = ""
+        if int(venda.get("moto_id") or 0):
+            try:
+                await motos_loja.desfazer(int(venda["moto_id"]))
+            except Exception:
+                aviso_moto = " A moto não pôde voltar ao estoque: ajuste a situação dela em Motos da loja."
+        elif any((i.get("descricao") or "").startswith("Moto: ") for i in await _itens_cache(venda_id)):
+            aviso_moto = " Volte a moto vendida para Disponível em Motos da loja."
+
         try:
             itens = await _itens_da_venda(venda_id, venda_nova=bool((venda.get("status") or "").strip()))
         except Exception:
@@ -179,7 +254,8 @@ async def cancelar_venda(venda_id: int, motivo: str = "") -> dict:
                     f"Venda nº {venda_id} cancelada, mas os itens não puderam ser lidos: confira o estoque manualmente."}
         if not itens:
             return {"situacao": "cancelada", "mensagem":
-                    f"Venda nº {venda_id} cancelada. Ela é anterior ao registro de itens: confira o estoque manualmente."}
+                    f"Venda nº {venda_id} cancelada. Ela é anterior ao registro de itens: confira o estoque manualmente."
+                    + aviso_moto}
 
         devolucao: dict[int, int] = {}
         for item in itens:
@@ -192,8 +268,9 @@ async def cancelar_venda(venda_id: int, motivo: str = "") -> dict:
             nomes = ", ".join(sorted({i.get("descricao") or f"produto {i.get(CAMPO_PRODUTO)}" for i in itens
                                       if int(i.get(CAMPO_PRODUTO) or 0)}))
             return {"situacao": "cancelada", "mensagem":
-                    f"Venda nº {venda_id} cancelada, mas o estoque não pôde ser devolvido ({nomes}): ajuste manualmente."}
-        return {"situacao": "cancelada", "mensagem": ""}
+                    f"Venda nº {venda_id} cancelada, mas o estoque não pôde ser devolvido ({nomes}): ajuste manualmente."
+                    + aviso_moto}
+        return {"situacao": "cancelada", "mensagem": aviso_moto.strip()}
 
 
 async def cancelar_varias(ids: list[int], motivo: str = "") -> list[dict]:
