@@ -1,0 +1,135 @@
+{
+  "id": "hsMotosXano00001",
+  "name": "Harley - consultar motos (Xano)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "b1f7a3c0-0001-4000-8000-000000000001",
+      "name": "Entrada",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "busca"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b1f7a3c0-0001-4000-8000-000000000002",
+      "name": "Login Xano",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "method": "POST",
+        "url": "https://x8ki-letl-twmt.n7.xano.io/api:lH_WsSPl/auth/login",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "hsCredXanoBot001",
+          "name": "Xano - conta do bot"
+        }
+      }
+    },
+    {
+      "id": "b1f7a3c0-0001-4000-8000-000000000003",
+      "name": "Listar motos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "url": "https://x8ki-letl-twmt.n7.xano.io/api:LtU_pM2N/motos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.authToken }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b1f7a3c0-0001-4000-8000-000000000004",
+      "name": "Motos a venda",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Só motos à venda e só dados que o cliente pode ver: sem preço de compra,\n// placa, chassi, dono anterior nem observações internas.\nconst busca = String($('Entrada').first().json.busca ?? '').toLowerCase().trim();\nconst termos = busca.split(/\\s+/).filter(Boolean);\nconst aVenda = $input.all().map(i => i.json)\n  .filter(m => m.id && ['Em estoque', 'Consignada'].includes(m.status || 'Em estoque'))\n  .map(m => ({\n    marca: m.marca || '',\n    modelo: m.modelo || '',\n    ano: m.ano || null,\n    cor: m.cor || '',\n    quilometragem: m.quilometragem ?? null,\n    preco_venda: m.preco_venda || null,\n    foto: m.foto?.url || '',\n  }));\nconst motos = aVenda.filter(m => termos.every(t => `${m.marca} ${m.modelo} ${m.ano ?? ''} ${m.cor}`.toLowerCase().includes(t)));\nreturn [{ json: {\n  busca,\n  total_encontradas: motos.length,\n  total_a_venda: aVenda.length,\n  aviso: 'preco_venda null significa preço não cadastrado: verificar com a equipe.',\n  motos,\n} }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "Entrada": {
+      "main": [
+        [
+          {
+            "node": "Login Xano",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Login Xano": {
+      "main": [
+        [
+          {
+            "node": "Listar motos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar motos": {
+      "main": [
+        [
+          {
+            "node": "Motos a venda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

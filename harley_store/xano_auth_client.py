@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from . import xano_client
 
-BASE_URL = "https://x8ki-letl-twmt.n7.xano.io/api:lH_WsSPl"
+BASE_URL = xano_client.AUTH_URL
 
 
 class XanoAuthError(Exception):

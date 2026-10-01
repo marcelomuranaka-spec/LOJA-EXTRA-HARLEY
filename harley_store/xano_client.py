@@ -36,7 +36,9 @@ from __future__ import annotations
 import asyncio
 import copy
 import datetime
+import os
 import time
+from pathlib import Path
 
 import httpx
 
@@ -86,6 +88,64 @@ async def _request(metodo: str, url: str, **kwargs) -> httpx.Response:
     return resposta
 
 
+# Os endpoints das tabelas exigem login (sem token o Xano responde 401).
+# O servidor entra com uma conta de serviço própria, e não com o token de
+# quem está usando a tela: o cache é um só para todos e a tarefa de fundo
+# manter_cache_aquecido roda sem ninguém logado. A conta é um usuário comum
+# da tabela `user` do Xano; email e senha ficam no arquivo .env da raiz do
+# projeto (fora do git, um em cada pasta: desenvolvimento e produção):
+#     XANO_EMAIL=...
+#     XANO_SENHA=...
+# O token vale 24 h; quando vence, o Xano responde 401 e o login é refeito.
+AUTH_URL = "https://x8ki-letl-twmt.n7.xano.io/api:lH_WsSPl"
+_ARQUIVO_ENV = Path(__file__).resolve().parent.parent / ".env"
+_token: str | None = None
+_trava_token = asyncio.Lock()
+
+
+class XanoSemLogin(Exception):
+    """Conta de serviço do Xano não configurada ou recusada no login."""
+
+
+def _credenciais() -> tuple[str, str]:
+    valores = {}
+    if _ARQUIVO_ENV.exists():
+        for linha in _ARQUIVO_ENV.read_text(encoding="utf-8-sig").splitlines():
+            chave, igual, valor = linha.partition("=")
+            if igual and not chave.strip().startswith("#"):
+                valores[chave.strip()] = valor.strip().strip("'\"")
+    email = os.environ.get("XANO_EMAIL") or valores.get("XANO_EMAIL", "")
+    senha = os.environ.get("XANO_SENHA") or valores.get("XANO_SENHA", "")
+    if not email or not senha:
+        raise XanoSemLogin(f"Defina XANO_EMAIL e XANO_SENHA em {_ARQUIVO_ENV}")
+    return email, senha
+
+
+async def _obter_token(vencido: str | None = None) -> str:
+    """Token atual; `vencido` é o token que acabou de levar 401. Se outra
+    chamada já renovou enquanto esta esperava a trava, reaproveita o novo."""
+    global _token
+    async with _trava_token:
+        if _token is None or _token == vencido:
+            email, senha = _credenciais()
+            resposta = await _request("POST", f"{AUTH_URL}/auth/login", json={"email": email, "password": senha})
+            if resposta.status_code >= 400:
+                raise XanoSemLogin(f"Login da conta de serviço {email} recusado pelo Xano ({resposta.status_code})")
+            _token = resposta.json()["authToken"]
+        return _token
+
+
+async def _request_xano(metodo: str, url: str, **kwargs) -> httpx.Response:
+    """_request com o token da conta de serviço. Um 401 significa que o Xano
+    recusou antes de executar, então repetir (até um POST) não duplica nada."""
+    token = await _obter_token()
+    resposta = await _request(metodo, url, headers={"Authorization": f"Bearer {token}"}, **kwargs)
+    if resposta.status_code == 401:
+        token = await _obter_token(vencido=token)
+        resposta = await _request(metodo, url, headers={"Authorization": f"Bearer {token}"}, **kwargs)
+    return resposta
+
+
 # Cache curto das listagens. As telas relistam as mesmas tabelas o tempo todo
 # (a cada letra digitada numa busca, a cada troca de página, várias telas
 # pedindo "clientes"): com o cache essas leituras são instantâneas e o limite
@@ -117,7 +177,7 @@ async def listar(tabela: str) -> list[dict]:
         guardado = _cache.get(tabela)
         if guardado and time.monotonic() - guardado[0] < _CACHE_SEGUNDOS:
             return copy.deepcopy(guardado[1])
-        resposta = await _request("GET", f"{BASE_URL}/{tabela}")
+        resposta = await _request_xano("GET", f"{BASE_URL}/{tabela}")
         resposta.raise_for_status()
         dados = resposta.json() or []
         _cache[tabela] = (time.monotonic(), dados)
@@ -126,7 +186,7 @@ async def listar(tabela: str) -> list[dict]:
 
 async def _renovar(tabela: str) -> None:
     async with _travas.setdefault(tabela, asyncio.Lock()):
-        resposta = await _request("GET", f"{BASE_URL}/{tabela}")
+        resposta = await _request_xano("GET", f"{BASE_URL}/{tabela}")
         resposta.raise_for_status()
         _cache[tabela] = (time.monotonic(), resposta.json() or [])
 
@@ -189,7 +249,7 @@ def _aplicar_no_cache(tabela: str, registro_id: int, registro: dict | None) -> N
 
 async def criar(tabela: str, dados: dict) -> dict:
     try:
-        resposta = await _request("POST", f"{BASE_URL}/{tabela}", json=dados)
+        resposta = await _request_xano("POST", f"{BASE_URL}/{tabela}", json=dados)
         resposta.raise_for_status()
         registro = resposta.json()
         _aplicar_no_cache(tabela, int(registro["id"]), registro)
@@ -201,7 +261,7 @@ async def criar(tabela: str, dados: dict) -> dict:
 
 async def atualizar(tabela: str, registro_id: int, dados: dict) -> dict:
     try:
-        resposta = await _request("PATCH", f"{BASE_URL}/{tabela}/{registro_id}", json=dados)
+        resposta = await _request_xano("PATCH", f"{BASE_URL}/{tabela}/{registro_id}", json=dados)
         resposta.raise_for_status()
         registro = resposta.json()
         _aplicar_no_cache(tabela, int(registro_id), registro)
@@ -213,7 +273,7 @@ async def atualizar(tabela: str, registro_id: int, dados: dict) -> dict:
 
 async def excluir(tabela: str, registro_id: int) -> None:
     try:
-        resposta = await _request("DELETE", f"{BASE_URL}/{tabela}/{registro_id}")
+        resposta = await _request_xano("DELETE", f"{BASE_URL}/{tabela}/{registro_id}")
         if resposta.status_code != 404:
             resposta.raise_for_status()
         _aplicar_no_cache(tabela, int(registro_id), None)
@@ -232,7 +292,7 @@ async def enviar_imagem(nome_arquivo: str, conteudo: bytes, mime: str) -> dict:
     tabela `motos`. Mandar a foto direto no POST/PATCH da tabela não
     funciona: o Xano grava só o nome, sem o arquivo. Precisa do endpoint
     `POST /upload/image` (ver README, seção "Fotos das motos da loja")."""
-    resposta = await _request(
+    resposta = await _request_xano(
         "POST", f"{BASE_URL}/upload/image", files={"content": (nome_arquivo, conteudo, mime)}
     )
     if resposta.status_code == 404:

@@ -1,0 +1,473 @@
+{
+  "id": "hsTelegramBot001",
+  "name": "Harley - assistente de vendas (Telegram)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "b1f7a3c0-0003-4000-8000-000000000001",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "3f0b8a52-6c1e-4d2a-9b7f-5e8c1a2d4f60",
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "hsCredTelegram01",
+          "name": "Telegram - bot da loja"
+        }
+      }
+    },
+    {
+      "id": "b1f7a3c0-0003-4000-8000-000000000002",
+      "name": "Digitando",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        220,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "webhookId": "7c2e9d14-3a5b-4f8e-8d61-2b9f0c7e5a31",
+      "parameters": {
+        "operation": "sendChatAction",
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "action": "typing"
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "hsCredTelegram01",
+          "name": "Telegram - bot da loja"
+        }
+      }
+    },
+    {
+      "id": "b1f7a3c0-0003-4000-8000-000000000003",
+      "name": "Buscar lead",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        0
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "leads_telegram"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "telegram_id",
+              "keyValue": "={{ String($('Telegram Trigger').first().json.message.chat.id) }}"
+            }
+          ]
+        },
+        "limit": 1
+      }
+    },
+    {
+      "id": "b1f7a3c0-0003-4000-8000-000000000004",
+      "name": "Assistente de vendas",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        680,
+        0
+      ],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Telegram Trigger').first().json.message.text || '[O cliente enviou uma mensagem sem texto (foto, áudio ou figurinha). Diga que por aqui você só consegue ler mensagens de texto.]' }}",
+        "options": {
+          "systemMessage": "=Você é o assistente virtual da Harley Store, especializada\nna venda de motocicletas.\n\nSeu objetivo é atender clientes através do Telegram, entender suas\nnecessidades e conduzi-los até o próximo passo adequado da jornada\nde compra.\n\nVocê pode:\n\n- consultar motos disponíveis;\n- consultar preços cadastrados no sistema;\n- apresentar características das motos;\n- identificar o perfil e interesse do cliente;\n- registrar e atualizar leads;\n- consultar informações de financiamento quando disponíveis;\n- solicitar dados necessários para atendimento;\n- encaminhar o cliente para um vendedor humano;\n- registrar agendamentos quando essa função estiver disponível.\n\nREGRAS IMPORTANTES:\n\n1. Nunca invente informações sobre motos, preços, estoque,\n   financiamento ou condições comerciais.\n\n2. Sempre consulte o sistema quando uma informação depender\n   de dados atualizados.\n\n3. Não informe uma moto como disponível apenas porque ela\n   aparece no seu conhecimento prévio.\n\n4. Se não encontrar uma informação no sistema, informe ao cliente\n   que precisa verificar com a equipe.\n\n5. Não altere dados de clientes sem utilizar a ferramenta\n   correspondente.\n\n6. Antes de executar uma operação que possa gerar compromisso\n   comercial, confirme os dados necessários com o cliente.\n\n7. Seja objetivo e natural nas mensagens do Telegram.\n\n8. Não faça perguntas desnecessárias. Colete somente os dados\n   necessários para realizar a próxima etapa.\n\n9. Quando identificar intenção clara de compra, registre ou atualize\n   o lead através da ferramenta apropriada.\n\n10. Quando o cliente solicitar atendimento humano, encaminhe para\n    um vendedor.\n\nCONTEXTO DO CLIENTE:\n\nNome: {{ [$('Telegram Trigger').first().json.message.from.first_name, $('Telegram Trigger').first().json.message.from.last_name].filter(Boolean).join(' ') }}\nTelegram ID: {{ $('Telegram Trigger').first().json.message.chat.id }}\nHistórico: as mensagens anteriores desta conversa já estão na memória do chat.\nLead: {{ $('Buscar lead').first().json.telegram_id ? JSON.stringify($('Buscar lead').first().json) : 'nenhum lead registrado para este cliente ainda' }}\n\nDADOS DISPONÍVEIS:\n\nData e hora atuais: {{ $now.setZone('America/Sao_Paulo').toFormat('dd/MM/yyyy HH:mm') }}\n- Motos e preços: ferramenta consultar_motos (motos à venda na loja, com marca, modelo, ano, cor, quilometragem, preço de venda e link da foto).\n- Leads: ferramenta salvar_lead. Registra ou atualiza o lead deste cliente; envie só os campos novos ou alterados.\n- Financiamento: o sistema ainda não tem dados de financiamento. Diga que a equipe verifica as condições e registre o interesse no lead (forma_pagamento).\n- Agendamento: registre data e horário pedidos pelo cliente no campo agendamento do lead, com status \"agendamento_solicitado\", e diga que a equipe vai confirmar.\n- Atendimento humano: use salvar_lead com status \"aguardando_vendedor\" e avise que um vendedor vai continuar a conversa por aqui.\n- Formato: texto simples, sem Markdown (sem asteriscos nem negrito), mensagens curtas.\n\nAo responder, priorize sempre informações provenientes das\nferramentas e do sistema da concessionária.",
+          "maxIterations": 10,
+          "enableStreaming": false
+        }
+      }
+    },
+    {
+      "id": "b1f7a3c0-0003-4000-8000-000000000005",
+      "name": "Claude",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        520,
+        260
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "claude-sonnet-5"
+        },
+        "options": {
+          "maxTokensToSample": 1024
+        }
+      },
+      "credentials": {
+        "anthropicApi": {
+          "id": "hsCredClaude0001",
+          "name": "Anthropic - Claude"
+        }
+      }
+    },
+    {
+      "id": "b1f7a3c0-0003-4000-8000-000000000006",
+      "name": "Memoria da conversa",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        680,
+        260
+      ],
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ 'telegram-' + $('Telegram Trigger').first().json.message.chat.id }}",
+        "contextWindowLength": 20
+      }
+    },
+    {
+      "id": "b1f7a3c0-0003-4000-8000-000000000007",
+      "name": "consultar_motos",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        840,
+        260
+      ],
+      "parameters": {
+        "description": "Consulta no sistema as motos à venda na loja, com preço de venda. Use antes de falar de disponibilidade, preço ou características. Sem busca, lista todas.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "hsMotosXano00001",
+          "cachedResultName": "Harley - consultar motos (Xano)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "busca": "={{ $fromAI('busca', `Marca, modelo, ano ou cor para filtrar; vazio lista todas`, 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "busca",
+              "displayName": "busca",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      }
+    },
+    {
+      "id": "b1f7a3c0-0003-4000-8000-000000000008",
+      "name": "salvar_lead",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        1000,
+        260
+      ],
+      "parameters": {
+        "description": "Registra ou atualiza o lead do cliente desta conversa. Envie só os campos que mudaram; campos omitidos mantêm o valor já gravado.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "hsSalvarLead0001",
+          "cachedResultName": "Harley - salvar lead (Telegram)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telegram_id": "={{ String($('Telegram Trigger').first().json.message.chat.id) }}",
+            "nome": "={{ $fromAI('nome', `Nome do cliente`, 'string') }}",
+            "telefone": "={{ $fromAI('telefone', `Telefone com DDD, se o cliente informou`, 'string') }}",
+            "moto_interesse": "={{ $fromAI('moto_interesse', `Moto ou modelo de interesse`, 'string') }}",
+            "forma_pagamento": "={{ $fromAI('forma_pagamento', `À vista, financiamento, consórcio, troca etc.`, 'string') }}",
+            "perfil": "={{ $fromAI('perfil', `Perfil e uso pretendido (ex.: primeira moto, viagem, cidade)`, 'string') }}",
+            "status": "={{ $fromAI('status', `novo, interessado, agendamento_solicitado ou aguardando_vendedor`, 'string') }}",
+            "agendamento": "={{ $fromAI('agendamento', `Data e horário pedidos pelo cliente para visita ou test ride`, 'string') }}",
+            "observacoes": "={{ $fromAI('observacoes', `Resumo atualizado do atendimento (inclua o que já havia)`, 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telegram_id",
+              "displayName": "telegram_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "nome",
+              "displayName": "nome",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "moto_interesse",
+              "displayName": "moto_interesse",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "forma_pagamento",
+              "displayName": "forma_pagamento",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "perfil",
+              "displayName": "perfil",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "agendamento",
+              "displayName": "agendamento",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "observacoes",
+              "displayName": "observacoes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      }
+    },
+    {
+      "id": "b1f7a3c0-0003-4000-8000-000000000009",
+      "name": "Responder",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1080,
+        -100
+      ],
+      "webhookId": "a4d6f218-9e3c-4b7a-8f25-6c0e1b9d3a74",
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "text": "={{ ($json.output || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "hsCredTelegram01",
+          "name": "Telegram - bot da loja"
+        }
+      }
+    },
+    {
+      "id": "b1f7a3c0-0003-4000-8000-00000000000a",
+      "name": "Avisar falha",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1080,
+        100
+      ],
+      "webhookId": "e81b3c57-2d4f-4a96-b0c8-9f7a5e2d1c43",
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "text": "Desculpe, tive um problema para responder agora. Pode repetir a mensagem daqui a pouco? Se preferir, um vendedor pode falar com você.",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "hsCredTelegram01",
+          "name": "Telegram - bot da loja"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Digitando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Digitando": {
+      "main": [
+        [
+          {
+            "node": "Buscar lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar lead": {
+      "main": [
+        [
+          {
+            "node": "Assistente de vendas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assistente de vendas": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Avisar falha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Assistente de vendas",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoria da conversa": {
+      "ai_memory": [
+        [
+          {
+            "node": "Assistente de vendas",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_motos": {
+      "ai_tool": [
+        [
+          {
+            "node": "Assistente de vendas",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "salvar_lead": {
+      "ai_tool": [
+        [
+          {
+            "node": "Assistente de vendas",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

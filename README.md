@@ -101,7 +101,20 @@ em python.org, marque "Add python.exe to PATH" na instalação, e use `py
    reflex db migrate
    ```
 
-6. Rode o app de **desenvolvimento** e acesse **http://localhost:3001**:
+6. Configure a conta que o servidor usa para acessar o Xano. Os endpoints
+   das tabelas exigem login (sem ele toda tela falha com `401
+   Unauthorized`). Crie o arquivo `.env` na raiz do projeto, fora do git,
+   com o email e a senha de um usuário do app (tabela `user` do Xano):
+
+   ```
+   XANO_EMAIL=conta.do.sistema@exemplo.com
+   XANO_SENHA=...
+   ```
+
+   A pasta da produção (`C:\HARLEY_PROD`) precisa do **seu próprio** `.env`,
+   porque ele não vai junto na publicação.
+
+7. Rode o app de **desenvolvimento** e acesse **http://localhost:3001**:
 
    ```powershell
    .\scripts\iniciar_dev.ps1
@@ -172,6 +185,35 @@ chaves estrangeiras do banco original):
 
 `Funcionários` e `Fornecedores` → `Produtos` → `Clientes` → `Motos dos clientes`
 → aí sim `Vendas`, `Ordens de serviço` e `Compras`.
+
+## Assistente de vendas no Telegram (n8n)
+
+O bot roda no n8n do Docker Desktop (pasta `n8n/`). Ele usa o Claude para
+responder, consulta as motos à venda no Xano e grava os leads na Data Table
+`leads_telegram` do n8n (ela é criada sozinha no primeiro lead).
+
+- **Configurar (uma vez):** `.\n8n\configurar_bot.ps1`. O script pede o token
+  do bot (@BotFather), a chave da API da Anthropic e a conta do Xano, e testa
+  cada um. Depois importa os workflows, grava as credenciais no n8n, publica o
+  bot, grava a conta do Xano no `.env` do app (desenvolvimento e produção) e
+  cria a tarefa `HarleyStore-n8n`. Rode de novo para trocar alguma chave ou
+  depois de reinstalar o Docker.
+- **Iniciar:** `.\n8n\iniciar_n8n.ps1` (editor em http://localhost:5678).
+  A tarefa `HarleyStore-n8n` roda esse script sozinha ao entrar no Windows,
+  e ele abre o Docker Desktop se precisar. O Telegram só entrega mensagens
+  num endereço HTTPS público. Por isso o script abre um túnel gratuito da
+  Cloudflare, cujo endereço muda a cada início, e passa esse endereço ao n8n.
+  Log da tarefa: `logs\n8n-inicio.log`.
+- **Dados:** ficam no volume Docker `n8n_data`, então recriar ou atualizar
+  o container não apaga nada. Mas o volume some se o Docker Desktop for
+  reinstalado ou voltar ao padrão de fábrica. A imagem é a
+  `n8nio/n8n:v3-rc-20260928` (prévia "nightly"): o n8n não volta a uma versão
+  anterior depois de atualizar o banco.
+- **Workflows:** `n8n/workflows/` tem as cópias versionadas do bot
+  (`assistente_telegram`) e das ferramentas dele (`consultar_motos` e
+  `salvar_lead`).
+- A consulta de motos mostra só as motos com situação *Em estoque* ou
+  *Consignada*, sem preço de compra, placa, chassi nem observações internas.
 
 ## Estrutura do projeto (para você mexer)
 
