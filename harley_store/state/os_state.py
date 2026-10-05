@@ -4,6 +4,10 @@ Estoque: as peças lançadas numa OS saem do estoque ao abrir a OS, pela
 mesma rotina protegida das vendas (`estoque.movimentar`): se faltar
 estoque de alguma peça, nada é gravado. Excluir uma OS devolve as peças ao
 estoque. Se uma gravação falhar no meio, o que já foi feito é desfeito.
+
+Faturamento: ao marcar a OS como CONCLUIDA, grava-se `data_conclusao`, e o
+valor da OS (peças + mão de obra) entra no faturamento desse dia no Painel.
+Se ela sair de CONCLUIDA, a data é apagada e o valor sai do faturamento.
 """
 
 import asyncio
@@ -288,9 +292,23 @@ class OrdensServicoState(rx.State):
         if registro is None:
             await self.carregar()
             return rx.toast.error(f"A OS nº {os_id} não existe mais.")
+        anterior = registro.get("status") or "ABERTA"
         registro["status"] = novo_status
-        await xano.atualizar(TABELA_OS, int(os_id), {k: v for k, v in registro.items() if k != "id"})
+        if novo_status == "CONCLUIDA" and anterior != "CONCLUIDA":
+            registro["data_conclusao"] = xano.datetime_para_epoch_ms()
+        elif novo_status != "CONCLUIDA":
+            registro["data_conclusao"] = None
+        gravado = await xano.atualizar(TABELA_OS, int(os_id), {k: v for k, v in registro.items() if k != "id"})
         await self.carregar()
+        if novo_status == "CONCLUIDA" and anterior != "CONCLUIDA":
+            if "data_conclusao" not in gravado:
+                log.error("ordens_servico sem o campo data_conclusao no Xano")
+                return rx.toast.warning(
+                    f"OS nº {os_id} concluída, mas o banco ainda não tem a data de conclusão: ela não entra "
+                    "no faturamento. Rode scripts/aplicar_xano.ps1."
+                )
+            valor = next((o["valor_total"] for o in self.ordens if o["id"] == str(os_id)), "0.00")
+            return rx.toast.success(f"OS nº {os_id} concluída: R$ {valor} (peças + mão de obra) no faturamento de hoje.")
 
     @rx.event
     async def excluir_os(self, os_id: str):

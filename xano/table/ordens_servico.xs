@@ -15,6 +15,9 @@ table ordens_servico {
   
     // Status: ABERTA, EM_ANDAMENTO, CONCLUIDA, CANCELADA
     text status?=ABERTA
+
+    // Quando a OS foi marcada como CONCLUIDA (entra no faturamento desse dia)
+    timestamp data_conclusao?
   }
 
   index = [{type: "primary", field: [{name: "id"}]}]

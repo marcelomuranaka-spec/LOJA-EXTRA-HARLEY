@@ -20,10 +20,14 @@ Visão financeira (motos x produtos) — regras aprovadas pelo dono da loja:
     * Motos: motos marcadas "Vendida", pelo preço de venda, na data de saída
       (vender moto da loja não gera registro em transacoes) + vendas antigas
       do tipo MOTO sem itens.
-    * Produtos: itens com produto do estoque; vendas antigas sem itens dos
-      tipos PECAS e BALCAO.
-    * Fora: itens avulsos (mão de obra etc.), vendas do tipo ORDEM_SERVICO
-      (OS) e COMPRA (compra não é faturamento).
+    * Produtos e serviços: itens das vendas (produtos do estoque e itens
+      avulsos, como mão de obra); OS CONCLUIDAS, com peças + mão de obra, na
+      data de conclusão (`data_conclusao`); vendas antigas sem itens dos tipos
+      PECAS e BALCAO.
+    * Fora: vendas do tipo COMPRA (compra não é faturamento) e do tipo
+      ORDEM_SERVICO (a OS conta pela própria conclusão; somar as duas contaria
+      em dobro). OS concluída antes de existir `data_conclusao` não tem dia
+      definido e não entra.
 - Dia e mês no fuso America/Sao_Paulo (o Xano grava data em UTC, epoch ms).
 - Dinheiro em Decimal; float só no fim, para o gráfico.
 As funções puras abaixo fazem as contas (testadas em tests/test_painel.py).
@@ -87,8 +91,10 @@ def valor_estoque_produtos(produtos: list[dict]) -> Decimal:
                 if int(p.get("estoque_qtd") or 0) > 0), Decimal(0))
 
 
-def lancamentos_faturamento(transacoes: list[dict], itens: list[dict], motos: list[dict]):
-    """[(data local, "motos" | "produtos", valor Decimal)] conforme as regras do topo."""
+def lancamentos_faturamento(transacoes: list[dict], itens: list[dict], motos: list[dict],
+                            ordens: list[dict] = (), itens_os: list[dict] = ()):
+    """[(data local, "motos" | "produtos", valor Decimal)] conforme as regras do topo.
+    "produtos" = produtos e serviços (mão de obra)."""
     itens_por_venda: dict[int, list[dict]] = {}
     for item in itens:
         itens_por_venda.setdefault(int(item.get(CAMPO_VENDA) or 0), []).append(item)
@@ -101,10 +107,9 @@ def lancamentos_faturamento(transacoes: list[dict], itens: list[dict], motos: li
             continue
         itens_da_venda = itens_por_venda.get(int(t["id"]))
         if itens_da_venda:
-            for item in itens_da_venda:
-                if int(item.get(CAMPO_PRODUTO) or 0):  # 0 = avulso: fica de fora
-                    lancamentos.append((data, "produtos",
-                                        int(item.get("quantidade") or 0) * _dec(item.get("valor_unitario"))))
+            for item in itens_da_venda:  # produto do estoque ou avulso (mão de obra)
+                lancamentos.append((data, "produtos",
+                                    int(item.get("quantidade") or 0) * _dec(item.get("valor_unitario"))))
         elif tipo in TIPOS_LEGADO_MOTOS:
             lancamentos.append((data, "motos", _dec(t.get("valor_total"))))
         elif tipo in TIPOS_LEGADO_PRODUTOS:
@@ -114,6 +119,15 @@ def lancamentos_faturamento(transacoes: list[dict], itens: list[dict], motos: li
         data = data_local(m.get("data_saida"))
         if m.get("status") == "Vendida" and data is not None:
             lancamentos.append((data, "motos", _dec(m.get("preco_venda"))))
+
+    valor_por_os: dict[int, Decimal] = {}
+    for item in itens_os:  # valor_total_item já é o total do item (peça ou mão de obra)
+        os_id = int(item.get("id_os") or 0)
+        valor_por_os[os_id] = valor_por_os.get(os_id, Decimal(0)) + _dec(item.get("valor_total_item"))
+    for o in ordens:
+        data = data_local(o.get("data_conclusao"))
+        if (o.get("status") or "") == "CONCLUIDA" and data is not None:
+            lancamentos.append((data, "produtos", valor_por_os.get(int(o["id"]), Decimal(0))))
     return lancamentos
 
 
@@ -172,18 +186,19 @@ class DashboardState(rx.State):
         hoje = datetime.date.today()
         inicio_mes = datetime.datetime.combine(hoje.replace(day=1), datetime.time.min)
 
-        # As 9 tabelas são buscadas em paralelo: em sequência o painel levava
+        # As 10 tabelas são buscadas em paralelo: em sequência o painel levava
         # ~12 s para abrir (cada chamada ao Xano Free leva 1–2 s). Se o Xano
         # devolver 429 (limite por minuto), `_request` já refaz a chamada.
         (
             produtos, lista_clientes, motos, ordens, transacoes,
-            lista_funcionarios, lista_fornecedores, entradas, itens_venda,
+            lista_funcionarios, lista_fornecedores, entradas, itens_venda, itens_os,
         ) = await asyncio.gather(
             *(
                 xano.listar(tabela)
                 for tabela in (
                     "produtos", "clientes", "motos", "ordens_servico", "transacoes",
                     "funcionarios", "fornecedores", "entrada_mercadoria", "itens_transacao",
+                    "itens_ordem_servico",
                 )
             )
         )
@@ -209,7 +224,7 @@ class DashboardState(rx.State):
 
         # Faturamento: motos x produtos (regras no topo do arquivo)
         resumo = resumo_faturamento(
-            lancamentos_faturamento(transacoes, itens_venda, motos), datetime.datetime.now(FUSO)
+            lancamentos_faturamento(transacoes, itens_venda, motos, ordens, itens_os), datetime.datetime.now(FUSO)
         )
         self.faturamento_hoje = _moeda(resumo["hoje"])
         self.faturamento_motos_mes = _moeda(resumo["motos_mes"])

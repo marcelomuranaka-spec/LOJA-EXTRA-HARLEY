@@ -34,8 +34,17 @@ def item(vid, produto, qtd, unitario):
     return {"transacao_id": vid, "produto_id": produto, "quantidade": qtd, "valor_unitario": unitario}
 
 
-def resumo(transacoes=(), itens=(), motos=()):
-    return resumo_faturamento(lancamentos_faturamento(list(transacoes), list(itens), list(motos)), AGORA)
+def resumo(transacoes=(), itens=(), motos=(), ordens=(), itens_os=()):
+    return resumo_faturamento(
+        lancamentos_faturamento(list(transacoes), list(itens), list(motos), list(ordens), list(itens_os)), AGORA)
+
+
+def os_(oid, status="CONCLUIDA", concluida_ms=None):
+    return {"id": oid, "status": status, "data_abertura": ms(2026, 10, 1), "data_conclusao": concluida_ms}
+
+
+def item_os(oid, produto, valor):
+    return {"id_os": oid, "id_produto": produto, "quantidade": 1, "valor_total_item": valor}
 
 
 class TestEstoque(unittest.TestCase):
@@ -68,11 +77,37 @@ class TestEstoque(unittest.TestCase):
 
 
 class TestFaturamento(unittest.TestCase):
-    def test_venda_mista_separa_por_item_e_ignora_avulso(self):
+    def test_venda_soma_produtos_e_mao_de_obra(self):
         r = resumo([venda(1, ms(2026, 10, 10), "MOTO", 1290)],
                    [item(1, 7, 2, 500), item(1, 8, 1, 90), item(1, 0, 1, 200)])  # 0 = mão de obra
-        self.assertEqual(r["produtos_mes"], Decimal("1090"))
+        self.assertEqual(r["produtos_mes"], Decimal("1290"))
         self.assertEqual(r["motos_mes"], Decimal("0"))  # itens mandam, não o tipo da venda
+
+    def test_balcao_produto_mais_mao_de_obra_no_dia(self):
+        # como no print: produto + mão de obra = R$ 228,00 no faturamento de hoje
+        r = resumo([venda(1, ms(2026, 10, 15, 10), total=228)], [item(1, 7, 1, 178), item(1, 0, 1, 50)])
+        self.assertEqual(r["hoje"], Decimal("228"))
+
+    def test_os_concluida_soma_pecas_e_mao_de_obra_no_dia_da_conclusao(self):
+        ordens = [os_(1, concluida_ms=ms(2026, 10, 15, 9))]
+        itens_os = [item_os(1, 7, 389.00), item_os(1, 0, 150.00)]  # peça + mão de obra
+        r = resumo(ordens=ordens, itens_os=itens_os)
+        self.assertEqual(r["hoje"], Decimal("539.00"))
+        self.assertEqual(r["produtos_mes"], Decimal("539.00"))
+
+    def test_os_nao_concluida_cancelada_ou_sem_data_nao_conta(self):
+        ordens = [
+            os_(1, "ABERTA"), os_(2, "EM_ANDAMENTO"),
+            os_(3, "CANCELADA", ms(2026, 10, 15)),  # cancelada (data esquecida) não conta
+            os_(4, "CONCLUIDA", None),             # concluída antes de existir data_conclusao
+        ]
+        itens_os = [item_os(i, 0, 100) for i in (1, 2, 3, 4)]
+        self.assertEqual(resumo(ordens=ordens, itens_os=itens_os)["total_mes"], Decimal("0"))
+
+    def test_os_concluida_em_outro_dia_conta_no_mes_mas_nao_hoje(self):
+        r = resumo(ordens=[os_(1, concluida_ms=ms(2026, 10, 3))], itens_os=[item_os(1, 0, 80)])
+        self.assertEqual(r["hoje"], Decimal("0"))
+        self.assertEqual(r["produtos_mes"], Decimal("80"))
 
     def test_desconto_no_preco_unitario_ja_e_liquido(self):
         r = resumo([venda(1, ms(2026, 10, 10), total=269.91)], [item(1, 7, 3, 89.97)])

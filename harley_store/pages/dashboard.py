@@ -51,11 +51,12 @@ def _secao(titulo: str, *filhos: rx.Component) -> rx.Component:
 
 def _grafico_faturamento() -> rx.Component:
     return rx.box(
-        rx.text("Faturamento por mês — motos + produtos, últimos 12 meses (R$)", size="3", weight="bold", color="white"),
+        rx.text("Faturamento por mês — motos + produtos e serviços, últimos 12 meses (R$)", size="3", weight="bold",
+                color="white"),
         rx.text(
             "Hoje: R$ ", DashboardState.faturamento_hoje,
             "  ·  Mês: R$ ", DashboardState.faturamento_total_mes,
-            "  (motos + produtos)",
+            "  (motos + produtos e serviços)",
             size="2",
             color=TEXTO_SECUNDARIO,
         ),
@@ -131,7 +132,7 @@ def dashboard_page() -> rx.Component:
                 _cartao("Faturamento de hoje", rx.text("R$ ", DashboardState.faturamento_hoje), "wallet", href="/vendas"),
                 _cartao("Faturamento de Motos (mês)", rx.text("R$ ", DashboardState.faturamento_motos_mes), "bike",
                         href="/produtos?aba=motos"),
-                _cartao("Faturamento de Produtos (mês)", rx.text("R$ ", DashboardState.faturamento_produtos_mes),
+                _cartao("Produtos e serviços (mês)", rx.text("R$ ", DashboardState.faturamento_produtos_mes),
                         "chart-line", href="/vendas"),
                 columns=rx.breakpoints(initial="1", sm="3"),
                 spacing="4",

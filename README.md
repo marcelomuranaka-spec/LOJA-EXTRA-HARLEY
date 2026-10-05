@@ -21,9 +21,11 @@ Transações (Vendas), Ordens de Serviço e Itens de Ordem de Serviço.
   faturamento dos últimos 12 meses (motos + produtos, com o total do dia e
   do mês), produtos, estoque baixo, clientes, OS em aberto e um extrato
   recente (igual à view `vw_resumo_operacoes` do script original, só que
-  calculada em Python). O faturamento não inclui vendas canceladas, OS,
-  compras nem itens avulsos; dia e mês seguem o fuso de São Paulo. As
-  regras ficam no topo de `harley_store/state/dashboard_state.py`.
+  calculada em Python). O faturamento soma os produtos e a mão de obra das
+  vendas e as **OS concluídas** (peças + mão de obra), no dia em que a OS
+  foi marcada como Concluída; não inclui vendas canceladas nem compras. Dia
+  e mês seguem o fuso de São Paulo. As regras ficam no topo de
+  `harley_store/state/dashboard_state.py`.
 - **Produtos** — catálogo e estoque, separado em **abas por categoria**
   (com a quantidade de cada uma), aviso de estoque baixo (≤ 5 unidades),
   busca e categorias sugeridas (Peças, Vestuário, Consumíveis, Acessórios,
