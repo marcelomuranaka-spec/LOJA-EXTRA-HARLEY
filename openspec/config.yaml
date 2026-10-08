@@ -7,7 +7,11 @@ context: |
   da oficina, compras de fornecedores, clientes e suas motos, e painel
   financeiro. Conceitos em docs/domain-model.md; visão em docs/project-overview.md.
   Tech stack: Python 3.12 + Reflex 0.7.14 (venv em .venv); Xano (dados e
-  autenticação, API REST, plano Free); SendGrid (e-mails).
+  autenticação, API REST, plano Free); SendGrid (e-mails). Ambiente: venv +
+  pip com requirements.txt (não usar uv).
+  Frontend: Reflex é a tecnologia obrigatória para implementação das
+  interfaces frontend do projeto. Não introduzir outra tecnologia de frontend
+  sem uma mudança explícita da decisão arquitetural.
   Architecture: cada tela = harley_store/state/<nome>_state.py +
   harley_store/pages/<nome>.py; rotas em harley_store/harley_store.py.
   Dados só via harley_store/xano_client.py; não há banco local

@@ -128,17 +128,19 @@ em python.org, marque "Add python.exe to PATH" na instalação, e use `py
    source .venv/bin/activate
    ```
 
-3. Instale as dependências:
+3. Atualize o `pip` e instale as dependências (o Reflex já está na lista):
 
    ```bash
+   python -m pip install --upgrade pip
    pip install -r requirements.txt
+   reflex --version
    ```
 
-4. Inicialize o Reflex (só na primeira vez — baixa os pacotes do frontend):
+   **Não rode `reflex init`:** ele serve só para criar um projeto novo. Na
+   primeira execução, o `reflex run` prepara sozinho os arquivos do frontend.
 
-   ```bash
-   reflex init
-   ```
+4. No VS Code, escolha o Python do `.venv` (Ctrl+Shift+P → **Python: Select
+   Interpreter** → o que está em `.venv`).
 
 5. Copie para a pasta o arquivo `.env` de uma instalação existente (tem a
    conta de serviço do Xano e, se configurado, o SendGrid; veja
@@ -251,7 +253,8 @@ C:\LOJA-EXTRA-HARLEY\
 │   ├── project-overview.md  ← visão geral: problema, usuários, escopo, arquitetura
 │   └── domain-model.md      ← conceitos do negócio e seus relacionamentos
 ├── rxconfig.py              ← configuração do Reflex (sem banco local: db_url=None)
-├── requirements.txt         ← dependências Python
+├── requirements.txt         ← dependências Python (gerado por pip freeze)
+├── skills-lock.json         ← versão instalada das Agent Skills do Reflex
 ├── .env                     ← credenciais (conta de serviço do Xano, SendGrid); fora do git
 ├── harley_store/
 │   ├── harley_store.py      ← ponto de entrada: rotas, proteção das ações e tarefa do cache
@@ -276,7 +279,8 @@ C:\LOJA-EXTRA-HARLEY\
 ├── xano/                    ← espelho do Xano: tabelas (table/) e endpoints (api/)
 ├── xano_import/             ← CSVs da importação inicial dos dados para o Xano
 ├── openspec/                ← especificações (specs/) e mudanças (changes/), ver OpenSpec
-└── .claude/                 ← comandos e skills do OpenSpec para o Claude Code
+├── .agents/skills/          ← Agent Skills do Reflex (npx skills add reflex-dev/agent-skills)
+└── .claude/                 ← comandos e skills do OpenSpec e cópia das skills do Reflex
 ```
 
 Cada tela é **sempre** o par `state/algo_state.py` + `pages/algo.py`. O

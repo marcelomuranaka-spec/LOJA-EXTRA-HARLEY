@@ -17,6 +17,31 @@ Regras de trabalho para qualquer agente de IA que atue neste projeto.
 - Se a implementação exigir algo fora do que a change descreve, parar e
   perguntar, em vez de improvisar.
 
+## Frontend
+
+O frontend do projeto deve ser implementado exclusivamente com Reflex.
+Utilize os mecanismos próprios do Reflex para componentes, estado, eventos,
+páginas e interação. Não introduza outra tecnologia de frontend para
+substituir ou complementar o Reflex, salvo quando houver uma alteração
+arquitetural explicitamente aprovada.
+
+## Ambiente e Agent Skills do Reflex
+
+- O projeto usa `venv` + `pip` (`.venv` e `requirements.txt`). Não usar
+  `uv` nem criar `pyproject.toml`/`uv.lock`, mesmo que o `uv` esteja
+  instalado na máquina. Não executar `reflex init` no projeto existente.
+- As skills do Reflex (`.agents/skills/`, cópia em `.claude/skills/`)
+  complementam estas regras e o OpenSpec, sem substituí-los. Quando
+  divergirem, valem as regras deste arquivo:
+  - `setup-python-env`: usar sempre o caminho `venv`/`pip`, nunca o do `uv`;
+  - `reflex-process-management`: para testar, `reflex compile --dry`; para
+    rodar, `reflex run` (ou `scripts/iniciar_dev.ps1`), e não `--env prod`.
+    A produção é iniciada só pelos scripts de `scripts/`;
+  - `reflex-docs`: a parte de banco (SQLModel) não se aplica, pois os
+    dados ficam no Xano.
+- Nova biblioteca: confirmar a necessidade, instalar no `.venv`, testar e
+  atualizar `requirements.txt` com `pip freeze` na mesma change.
+
 ## Arquitetura
 
 - Respeitar a stack definida: Python + Reflex (interface e servidor) e

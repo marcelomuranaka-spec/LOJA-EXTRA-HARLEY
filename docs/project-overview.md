@@ -89,8 +89,11 @@ cadernos, anotações). Isso gera:
 
 ## 8. Arquitetura tecnológica
 
-- **Aplicação:** Python 3.12 com o framework **Reflex** (interface e
-  servidor no mesmo projeto).
+- **Frontend:** Reflex. O Reflex será utilizado como tecnologia exclusiva
+  para implementação do frontend da aplicação (interface e servidor da
+  aplicação no mesmo projeto, em Python 3.12).
+- **Ambiente:** `venv` nativo do Python + `pip`, com as dependências em
+  `requirements.txt` (sem `uv`).
 - **Banco de dados e autenticação:** **Xano** (API REST na nuvem). Não há
   banco local.
 - **E-mails:** **SendGrid**.
