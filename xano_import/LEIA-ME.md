@@ -1,7 +1,8 @@
 # Importar o banco Harley Store para o workspace "HARLEY" no Xano
 
 Estes 10 arquivos CSV são a tradução exata do `SCRIPT_HARLEY_ATUALIZADO.sql`
-(o mesmo banco usado para construir o app Reflex em `harley_store/models.py`),
+(o mesmo banco usado para construir a primeira versão do app Reflex; o esquema
+atual das tabelas está espelhado em `xano/table/`),
 prontos para importar direto na tela **Database** do seu workspace novo
 (`x8ki-letl-twmt.n7.xano.io/workspace/168750-0`).
 

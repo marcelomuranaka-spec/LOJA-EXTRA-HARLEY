@@ -4,7 +4,7 @@ from ..components.botao_imprimir import botao_imprimir
 from ..components.confirm_dialog import confirm_delete_button
 from ..components.formulario import mensagem_erro
 from ..components.layout import page
-from ..models import STATUS_OS
+from ..constantes import STATUS_OS
 from ..state.os_state import OrdensServicoState
 
 

@@ -17,7 +17,7 @@ import reflex as rx
 
 from .. import estoque
 from .. import xano_client as xano
-from ..models import STATUS_OS
+from ..constantes import STATUS_OS
 from ..validacao import inteiro, numero
 from .auth_state import AuthState
 

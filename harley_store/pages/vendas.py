@@ -2,7 +2,7 @@ import reflex as rx
 
 from ..components.botao_imprimir import botao_imprimir
 from ..components.layout import page
-from ..models import TIPOS_TRANSACAO
+from ..constantes import TIPOS_TRANSACAO
 from ..state.vendas_state import VendasState
 
 

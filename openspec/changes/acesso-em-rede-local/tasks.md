@@ -1,5 +1,7 @@
 # Tasks
 
+Situação em 07/10/2026: a change continua aberta. A produção funcionou na rede da loja em 24 e 25/09/2026, mas foi pausada em 25/09/2026, quando o sistema passou ao "modo demonstração" (só `reflex run` no próprio notebook; a tarefa agendada `HarleyStore-Producao` está desativada). As tarefas pendentes abaixo exigem a produção ligada, outro aparelho na rede e acesso ao roteador; elas só podem ser concluídas quando a loja decidir voltar a usar o notebook como servidor.
+
 Legenda: **[você]** = feito pelo usuário, ou com autorização explícita dele, porque exige o roteador ou privilégio de administrador do Windows.
 
 ## 1. Pré-requisitos do ambiente
@@ -9,7 +11,7 @@ Legenda: **[você]** = feito pelo usuário, ou com autorização explícita dele
 - [x] 1.3 [você] Configurar "nunca suspender" na tomada, mantendo 10 min na bateria; verificar com `powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE` (índice AC `0x00000000`)
 - [x] 1.4 [você] Configurar "fechar a tampa: não fazer nada" na tomada; verificar com `powercfg /query SCHEME_CURRENT SUB_BUTTONS LIDACTION` (índice AC `0x00000000`)
 - [x] 1.5 [você] Definir o horário ativo do Windows Update das 7h às 19h; verificar em Configurações > Windows Update > Opções avançadas
-- [ ] 1.6 [você] Criar no roteador a reserva de IP para o adaptador `ec:0e:c4:f6:76:0d` e confirmar que "endereços de hardware aleatórios" está desligado para a rede "Sidlar"; verificar que o IP permanece o mesmo após desconectar e reconectar o Wi-Fi, e anotar o IP reservado
+- [ ] 1.6 [você] Criar no roteador a reserva de IP para o adaptador `ec:0e:c4:f6:76:0d` e confirmar que "endereços de hardware aleatórios" está desligado para a rede "Sidlar"; verificar que o IP permanece o mesmo após desconectar e reconectar o Wi-Fi, e anotar o IP reservado (pendente: a reserva no roteador não foi feita. Como alternativa, foi criado em 25/09/2026 o `scripts/ip_do_servidor.ps1`, que fixa o IP 192.168.0.12 no próprio notebook; o log mostra que o IP foi fixado às 07:37 e voltou ao automático às 07:55, antes da pausa da produção. O endereço configurado na produção é 192.168.0.12.)
 
 ## 2. Versionamento
 
@@ -36,6 +38,8 @@ Legenda: **[você]** = feito pelo usuário, ou com autorização explícita dele
 
 ## 5. Verificação integrada
 
+Pendentes desde a pausa da produção em 25/09/2026. O log do supervisor registra subidas manuais da produção entre 39 s e 186 s (24 e 25/09/2026), mas nenhuma das verificações abaixo foi feita a partir de outro aparelho nem após reiniciar o notebook.
+
 - [ ] 5.1 De outro computador ou celular na rede da loja, abrir `http://<IP reservado>:3000`, entrar e navegar por Vendas, Clientes e Produtos sem erro de conexão (spec: Acesso pelos aparelhos da rede interna)
 - [ ] 5.2 Com a produção em execução, rodar `scripts/iniciar_dev.ps1`, editar um arquivo e confirmar que a sessão aberta no outro aparelho continua funcionando sem desconectar (spec: Produção isolada do desenvolvimento)
 - [ ] 5.3 Do outro aparelho, tentar abrir `http://<IP reservado>:3001` e confirmar que a conexão é recusada (spec: Exposição restrita à rede privada)
@@ -45,4 +49,4 @@ Legenda: **[você]** = feito pelo usuário, ou com autorização explícita dele
 
 ## 6. Documentação
 
-- [ ] 6.1 Atualizar o README: remover "deixe o terminal aberto" e documentar os dois ambientes (endereços e portas), os scripts, o roteiro de publicação e rollback, a regra de testes com o Xano compartilhado e o tempo de subida medido em 5.4; verificar que os comandos citados no README existem em `scripts/`
+- [ ] 6.1 Atualizar o README: remover "deixe o terminal aberto" e documentar os dois ambientes (endereços e portas), os scripts, o roteiro de publicação e rollback, a regra de testes com o Xano compartilhado e o tempo de subida medido em 5.4; verificar que os comandos citados no README existem em `scripts/` (parcial em 07/10/2026: o README já não diz "deixe o terminal aberto" e documenta os dois ambientes, endereços e portas, os scripts, a publicação, a volta de versão e a regra do Xano compartilhado; falta o tempo de subida, que depende da tarefa 5.4)

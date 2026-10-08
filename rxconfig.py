@@ -9,11 +9,9 @@ import reflex as rx
 #     (o IP fica em producao.local.ps1, fora do git)
 config = rx.Config(
     app_name="harley_store",
-    # Banco local em arquivo — zero configuração, ótimo para rodar no PDV da loja.
-    # Para usar o SQL Server original, troque por algo como:
-    #   "mssql+pyodbc://usuario:senha@servidor/HarleyDavidsonStore?driver=ODBC+Driver+17+for+SQL+Server"
-    # (nesse caso instale também: pip install pyodbc)
-    # Para Postgres:  "postgresql+psycopg2://usuario:senha@host/harley_store"
-    db_url="sqlite:///harley_store.db",
+    # Sem banco local: todos os dados ficam no Xano (harley_store/xano_client.py).
+    # None é obrigatório: sem esta linha o Reflex usaria "sqlite:///reflex.db"
+    # e o `reflex run` pararia pedindo `reflex db init`.
+    db_url=None,
     tailwind=None,
 )

@@ -1,36 +1,32 @@
-assets/external/
-.web
-.states
-*.py[cod]
-__pycache__/
-*.pyc
+# Ambiente Python e caches
 .venv/
 venv/
 env/
+__pycache__/
+*.py[cod]
 
-# Gerado pelo Reflex a cada build (frontend Next.js compilado)
+# Gerado pelo Reflex: build do frontend (Next.js), estado das sessões e assets externos
 .web/
+.states/
+assets/external/
 
-# Banco de dados local — cada instalação tem o seu
+# Banco de dados local (não usado: os dados ficam no Xano)
 *.db
 *.db-journal
 
+# Segredos e configuração de cada instalação
 .env
-
-*.log
-logs/
-
-# Estado local do Reflex (sessões) — gerado em execução
-.states/
-
-# Endereço de rede da produção — específico de cada instalação (ver
-# openspec/changes/acesso-em-rede-local/design.md, D1)
+# Endereço de rede da produção (ver openspec/changes/acesso-em-rede-local/design.md, D1)
 producao.local.ps1
 
-# Fotos enviadas pelos usuários (produtos e motos) — dado local de cada
-# instalação, não faz parte do código-fonte.
+# Logs: só a pasta da raiz. xano/api/event_logs/logs/ é um endpoint do Xano e
+# precisa ficar no controle de versão.
+*.log
+/logs/
+
+# Fotos enviadas pelos usuários (produtos e motos) — dado local de cada instalação
 uploaded_files/
 
-# Xano: token da pagina de documentacao da API (segredo) e copia de seguranca
+# Xano: token da página de documentação da API (segredo) e cópia de segurança
 xano/api/harley/harley.xs
 xano_backup/

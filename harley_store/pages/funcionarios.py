@@ -3,7 +3,7 @@ import reflex as rx
 from ..components.confirm_dialog import confirm_delete_button
 from ..components.formulario import lista_vazia, mensagem_erro
 from ..components.layout import page
-from ..models import TIPOS_FUNCIONARIO
+from ..constantes import TIPOS_FUNCIONARIO
 from ..state.funcionarios_state import FuncionariosState
 
 

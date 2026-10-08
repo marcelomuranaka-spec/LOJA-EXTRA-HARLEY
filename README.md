@@ -8,6 +8,24 @@ Ele cobre as 10 tabelas do banco original: Fornecedores, Produtos, Funcionários
 Clientes, Motos dos Clientes, Entrada de Mercadoria (Compras), Itens de Compra,
 Transações (Vendas), Ordens de Serviço e Itens de Ordem de Serviço.
 
+## Índice
+
+- [O que o app faz](#o-que-o-app-faz)
+- [Como rodar (no VSCode)](#como-rodar-no-vscode)
+- [Modo demonstração (atual)](#modo-demonstração-atual)
+- [Produção e desenvolvimento (rede da loja)](#produção-e-desenvolvimento-rede-da-loja)
+- [Estrutura do projeto](#estrutura-do-projeto)
+- [Regras de integridade (estoque, cadastros e sessão)](#regras-de-integridade-estoque-cadastros-e-sessão)
+- [Testes automáticos](#testes-automáticos)
+- [Contas, perfis e senhas](#contas-perfis-e-senhas)
+- [Segurança da API do Xano e conta de serviço](#segurança-da-api-do-xano-e-conta-de-serviço)
+- [Spinner de carregamento nos botões](#spinner-de-carregamento-nos-botões)
+- [Fotos](#fotos)
+- [E-mails aos clientes (SendGrid)](#e-mails-aos-clientes-sendgrid)
+- [Histórico de estoque](#histórico-de-estoque)
+- [OpenSpec](#openspec)
+- [Backup](#backup)
+
 ## O que o app faz
 
 - **Tela inicial** (`/`) — logo Harley-Davidson sobre fundo preto, com o
@@ -77,8 +95,9 @@ Transações (Vendas), Ordens de Serviço e Itens de Ordem de Serviço.
 O servidor guarda as tabelas do Xano em cache (5 min) e as mantém
 atualizadas em segundo plano (1 consulta a cada 20 s), então as telas abrem
 em cerca de 0,1–0,9 s e o limite de requisições do plano Free do Xano não é
-atingido. Toda gravação feita pelo app limpa o cache da tabela na hora; uma
-alteração feita direto no painel do Xano aparece no app em até 5 minutos.
+atingido. Toda gravação feita pelo app atualiza a cópia em memória na hora,
+sem reler a tabela; uma alteração feita direto no painel do Xano aparece no
+app em até 5 minutos.
 
 ## Como rodar (no VSCode)
 
@@ -96,7 +115,7 @@ Para conferir quais versões de Python você tem instaladas no Windows, rode
 em python.org, marque "Add python.exe to PATH" na instalação, e use `py
 -3.12` no lugar de `python` nos comandos abaixo.
 
-1. Abra esta pasta (`harley_store`) no VSCode: `Arquivo → Abrir Pasta...`.
+1. Abra a pasta do projeto (`C:\LOJA-EXTRA-HARLEY`) no VSCode: `Arquivo → Abrir Pasta...`.
 2. Abra um terminal no VSCode (`Terminal → Novo Terminal`) e crie um ambiente
    virtual **com uma versão suportada do Python**:
 
@@ -121,13 +140,10 @@ em python.org, marque "Add python.exe to PATH" na instalação, e use `py
    reflex init
    ```
 
-5. Crie o banco local (arquivo `harley_store.db`, criado automaticamente
-   pelo Reflex a partir dos modelos em `harley_store/models.py`):
-
-   ```bash
-   reflex db init
-   reflex db migrate
-   ```
+5. Copie para a pasta o arquivo `.env` de uma instalação existente (tem a
+   conta de serviço do Xano e, se configurado, o SendGrid; veja
+   [Segurança da API do Xano e conta de serviço](#segurança-da-api-do-xano-e-conta-de-serviço)).
+   Não há banco local: todos os dados ficam no Xano.
 
 6. Rode o app de **desenvolvimento** e acesse **http://localhost:3001**:
 
@@ -138,7 +154,9 @@ em python.org, marque "Add python.exe to PATH" na instalação, e use `py
    O sistema que os funcionários usam é a **produção**, que roda sozinha;
    veja a seção abaixo.
 
-## Modo demonstração (atual): só `reflex run`, neste computador
+## Modo demonstração (atual)
+
+Só `reflex run`, neste computador.
 
 Hoje o sistema **não sobe sozinho** e não fica na rede da loja: roda só
 quando você manda, em http://localhost:3000.
@@ -174,7 +192,7 @@ está com **IP fixo 192.168.0.12**, configurado no Windows por
 `scripts\ip_do_servidor.ps1` (como administrador). Com IP fixo o notebook
 não conecta direito em outras redes: para usá-lo fora da loja, rode
 `.\scripts\ip_do_servidor.ps1 -Automatico`, e `-Fixo` ao voltar. Se o IP
-mudar, edite `producao.local.ps1` e rode `.\scriptstualizar_producao.ps1`.
+mudar, edite `producao.local.ps1` e rode `.\scripts\atualizar_producao.ps1`.
 (O ideal, quando houver a senha do modem Claro, é trocar o IP fixo por uma
 reserva de DHCP no modem.)
 
@@ -224,65 +242,87 @@ chaves estrangeiras do banco original):
 `Funcionários` e `Fornecedores` → `Produtos` → `Clientes` → `Motos dos clientes`
 → aí sim `Vendas`, `Ordens de serviço` e `Compras`.
 
-## Estrutura do projeto (para você mexer)
+## Estrutura do projeto
 
 ```
-harley_store/
-├── rxconfig.py              ← configuração do app e do banco de dados
-└── harley_store/
-    ├── harley_store.py      ← ponto de entrada: registra as páginas/rotas
-    ├── models.py            ← as 10 tabelas (comece por aqui para alterar a estrutura)
-    ├── components/
-    │   └── layout.py        ← menu lateral + moldura comum das páginas
-    ├── state/                ← um arquivo por tela: dados + regras de negócio
-    │   ├── fornecedores_state.py   ← CRUD mais simples (comece por aqui pra copiar)
-    │   ├── produtos_state.py
-    │   ├── ...
-    └── pages/                ← um arquivo por tela: só a parte visual
-        ├── fornecedores.py
-        ├── produtos.py
-        ├── ...
+C:\LOJA-EXTRA-HARLEY\
+├── AGENTS.md                ← regras de trabalho para agentes de IA (CLAUDE.md aponta para ele)
+├── docs/
+│   ├── project-overview.md  ← visão geral: problema, usuários, escopo, arquitetura
+│   └── domain-model.md      ← conceitos do negócio e seus relacionamentos
+├── rxconfig.py              ← configuração do Reflex (sem banco local: db_url=None)
+├── requirements.txt         ← dependências Python
+├── .env                     ← credenciais (conta de serviço do Xano, SendGrid); fora do git
+├── harley_store/
+│   ├── harley_store.py      ← ponto de entrada: rotas, proteção das ações e tarefa do cache
+│   ├── xano_client.py       ← acesso aos dados no Xano (cópia em memória, novas tentativas)
+│   ├── xano_auth_client.py  ← login e conferência da sessão
+│   ├── xano_admin_client.py ← administração das contas (tela Usuários)
+│   ├── sessao.py            ← barra no servidor as ações de quem não tem sessão
+│   ├── estoque.py           ← toda movimentação de estoque (travas e histórico)
+│   ├── vendas_servico.py    ← registro e cancelamento de vendas
+│   ├── dependencias.py      ← impede excluir cadastro que está em uso
+│   ├── validacao.py         ← CPF/CNPJ, e-mail, telefone, números e imagens
+│   ├── constantes.py        ← listas fixas das telas (tipos de venda, situações da OS...)
+│   ├── fotos_oficiais.py    ← fotos oficiais dos modelos (arquivos em assets/motos/)
+│   ├── email_clientes.py    ← e-mails aos clientes (SendGrid)
+│   ├── erros.py             ← mensagens de erro em português e logs
+│   ├── components/          ← menu (layout.py), cores (tema.py) e peças comuns das telas
+│   ├── state/               ← um arquivo por tela: dados + regras (ex.: produtos_state.py)
+│   └── pages/               ← um arquivo por tela: só a parte visual (ex.: produtos.py)
+├── assets/                  ← logo, ícones do app, spinner e fotos oficiais (motos/)
+├── scripts/                 ← operação: iniciar, publicar, aplicar o Xano, reparos e testes
+├── tests/                   ← testes automáticos (sem tocar no Xano real)
+├── xano/                    ← espelho do Xano: tabelas (table/) e endpoints (api/)
+├── xano_import/             ← CSVs da importação inicial dos dados para o Xano
+├── openspec/                ← especificações (specs/) e mudanças (changes/), ver OpenSpec
+└── .claude/                 ← comandos e skills do OpenSpec para o Claude Code
 ```
 
 Cada tela é **sempre** o par `state/algo_state.py` + `pages/algo.py`. O
-`state` guarda os dados carregados do banco e os métodos que salvam,
+`state` guarda os dados carregados do Xano e os métodos que salvam,
 editam e excluem; a `page` só desenha a tela e chama os métodos do state
 quando o usuário clica em algo. Separar assim é o que deixa fácil mexer
-numa tela sem quebrar as outras.
+numa tela sem quebrar as outras. Exceção: a aba Motos de Produtos usa
+`pages/motos_loja.py` como uma seção dentro de `pages/produtos.py`, com o
+state `state/motos_loja_state.py`.
 
-### Como alterar a estrutura do banco (adicionar/mudar uma tabela)
+### Como alterar a estrutura do banco (Xano)
 
-1. Edite (ou adicione) a classe correspondente em `harley_store/models.py`
-   — tem um passo a passo comentado bem no topo desse arquivo.
-2. Gere e aplique a migração (isso preserva os dados que já existem):
+O banco é o Xano; não há banco local nem migrações no app.
 
-   ```bash
-   reflex db makemigrations --message "descreva o que mudou"
-   reflex db migrate
+1. Registre a mudança no OpenSpec (`/opsx:propose "..."`), dizendo qual
+   tabela ou campo muda e por quê. Lembre que a equipe evita campos e
+   tabelas desnecessários no Xano.
+2. Altere o espelho na pasta `xano/`: os campos ficam em
+   `xano/table/<tabela>.xs`; se o endpoint de criação (`POST`) ou de
+   substituição (`PUT`) lista os campos um a um, acrescente o campo novo
+   nele também (`xano/api/harley/...`).
+3. Confira a prévia, que não grava nada:
+
+   ```powershell
+   .\scripts\aplicar_xano.ps1 -SoPrevia
    ```
 
-3. Se for uma tabela nova, copie um `state/*.py` e um `pages/*.py`
-   parecidos (o de `Fornecedores` é o mais simples; o de `Compras` mostra
-   o padrão de "cabeçalho + itens", usado também em Ordens de Serviço).
-4. Registre a rota nova em `harley_store/harley_store.py`
-   (`app.add_page(...)`) e o link no menu em
-   `harley_store/components/layout.py` (lista `MENU_ITEMS`).
+   Uma tabela no espelho **substitui** a definição inteira no Xano: se
+   aparecer na prévia uma tabela que você não alterou, confira antes se o
+   espelho não está sem algum campo que existe no Xano, para não apagar
+   dados.
+4. Aplique (a CLI pede confirmação e nunca apaga tabelas nem endpoints):
 
-### Como conectar no SQL Server (banco original) em vez do SQLite local
-
-Por padrão o app usa um arquivo local `harley_store.db` (SQLite), pensado
-para rodar direto no computador da loja sem precisar instalar nada além do
-Python. Se preferir usar o SQL Server do script original:
-
-1. `pip install pyodbc` (já vem comentado no `requirements.txt`).
-2. Em `rxconfig.py`, troque o `db_url` por algo como:
-
-   ```python
-   db_url="mssql+pyodbc://usuario:senha@servidor/HarleyDavidsonStore?driver=ODBC+Driver+17+for+SQL+Server"
+   ```powershell
+   .\scripts\aplicar_xano.ps1
    ```
 
-3. Rode `reflex db migrate` de novo para o Reflex criar/ajustar as tabelas
-   nesse banco.
+5. Ajuste o código. Tabela nova usada pelas telas entra em
+   `TABELAS_AQUECIDAS` (`harley_store/xano_client.py`); se ela aponta para
+   outra, entra em `REFERENCIAS` (`harley_store/dependencias.py`).
+6. Tela nova: copie um par `state/*.py` + `pages/*.py` parecido (o de
+   `Fornecedores` é o mais simples; o de `Compras` mostra o padrão
+   "cabeçalho + itens", usado também em Ordens de Serviço), registre a rota
+   em `harley_store/harley_store.py` (com `AuthState.exigir_login` como
+   primeiro item do `on_load` e o state na lista do `ExigeSessaoMiddleware`)
+   e o link no menu em `harley_store/components/layout.py` (`MENU_ITEMS`).
 
 ### Vendas antigas (antes do registro de itens)
 
@@ -415,6 +455,10 @@ observa as mensagens do websocket do Reflex, e o visual fica em
   **sem placa e sem chassi**: as placas e chassis da lista original são das
   motos dos clientes, e repeti-los faria a mesma moto existir duas vezes.
   Chassi, ano, cor e preços são preenchidos quando a unidade chegar.
+- Aceitos: PNG, JPG e WEBP (produtos e motos de clientes também GIF), até
+  5 MB; o conteúdo do arquivo é conferido, não só a extensão.
+- Ao excluir uma moto, a foto continua guardada no Xano (o plano não
+  oferece exclusão de arquivo pela API); isso não aparece para ninguém.
 
 ## E-mails aos clientes (SendGrid)
 
@@ -434,10 +478,13 @@ A chave é criada no SendGrid em *Settings > API Keys* (permissão "Mail
 Send"), e o remetente precisa estar verificado em *Settings > Sender
 Authentication*. Sem essas linhas, nenhum e-mail é enviado e o app funciona
 normalmente. Os textos ficam em `harley_store/email_clientes.py`.
-- Aceitos: PNG, JPG e WEBP (produtos e motos de clientes também GIF), até
-  5 MB; o conteúdo do arquivo é conferido, não só a extensão.
-- Ao excluir uma moto, a foto continua guardada no Xano (o plano não
-  oferece exclusão de arquivo pela API); isso não aparece para ninguém.
+
+Para conferir a configuração (chave, permissão de envio, remetente
+verificado) e mandar um e-mail de teste:
+
+```powershell
+.venv\Scripts\python.exe scripts\testar_sendgrid.py
+```
 
 ## Histórico de estoque
 
@@ -449,10 +496,41 @@ cada produto.
 
 ## OpenSpec
 
-O projeto está inicializado com o [OpenSpec](https://github.com/Fission-AI/OpenSpec)
-(pasta `openspec/`, contexto do projeto em `openspec/config.yaml`) e os
-comandos do Claude Code em `.claude/`. Para propor uma mudança nova:
-`/opsx:propose "sua ideia"`. Conferir a instalação: `openspec --version`.
+O projeto usa o [OpenSpec](https://github.com/Fission-AI/OpenSpec) para
+registrar o que o sistema faz e cada mudança feita nele. O contexto que a IA
+recebe vem de quatro documentos:
+
+| Documento | Pergunta que responde |
+|---|---|
+| `docs/project-overview.md` | O que é o projeto? |
+| `docs/domain-model.md` | Quais são os conceitos e relacionamentos? |
+| `AGENTS.md` | Como o agente deve trabalhar neste projeto? |
+| `openspec/config.yaml` | Que contexto, regras (`rules`) e orientações (`operations`) os workflows recebem? |
+
+Os comandos do OpenSpec para o Claude Code ficam em `.claude/` (instalados
+pelo `openspec init`).
+
+- **`openspec/specs/`** — o comportamento atual do sistema, organizado por
+  domínio: `plataforma/`, `vendas/`, `estoque/`, `cadastros/`, `clientes/`,
+  `compras/`, `documentos/`, `motos/`, `oficina/`, `painel/` e `produtos/`.
+- **`openspec/changes/`** — mudanças em andamento. Hoje está aberta a
+  `acesso-em-rede-local` (19 de 27 tarefas): as verificações que faltam
+  exigem a produção ligada na rede da loja.
+- **`openspec/changes/archive/`** — mudanças concluídas, com proposta,
+  desenho e tarefas. A data no nome de cada pasta é o dia em que o recurso
+  ficou pronto (conforme os commits).
+
+Toda mudança no sistema passa pelo fluxo:
+
+1. `/opsx:explore` — investiga a ideia e o código, sem criar arquivos;
+2. `/opsx:propose "sua ideia"` — cria a proposta, as especificações, o
+   desenho e as tarefas;
+3. **revisão** — o grupo lê e aprova ou corrige os artefatos;
+4. `/opsx:apply` — implementa as tarefas, marcando cada uma;
+5. `/opsx:archive` — atualiza `openspec/specs/` e arquiva a mudança.
+
+Para consultar: `openspec list` (mudanças abertas), `openspec list --specs`
+(especificações) e `openspec validate --all --strict` (validação).
 
 ## Backup
 
@@ -461,9 +539,8 @@ no **Xano**, não neste computador. Para ter uma cópia, exporte as tabelas
 pelo painel do Xano (Database → cada tabela → Export CSV) periodicamente e
 guarde os arquivos fora do notebook (pen drive ou nuvem).
 
-O arquivo `harley_store.db` (SQLite) e os `models.py`/`alembic/` são do
-início do projeto, antes da mudança para o Xano: o app não grava mais
-neles. As fotos de **produtos** e de **motos de clientes** ficam em
+O banco SQLite do início do projeto (`harley_store.db`, `models.py` e
+`alembic/`) foi removido em 07/10/2026 e continua no histórico do git. As
+fotos antigas de **produtos** e de **motos de clientes** ficam em
 `uploaded_files/` na pasta de cada ambiente (na produção,
 `C:\HARLEY_PROD\uploaded_files`); copie essa pasta junto com o backup.
-# LOJA-EXTRA-HARLEY

@@ -21,7 +21,7 @@ import reflex as rx
 
 from .. import vendas_servico as servico
 from .. import xano_client as xano
-from ..models import TIPOS_TRANSACAO
+from ..constantes import TIPOS_TRANSACAO
 from .auth_state import AuthState
 
 TABELA = "transacoes"

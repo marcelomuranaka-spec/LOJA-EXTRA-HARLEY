@@ -6,7 +6,7 @@ import reflex as rx
 
 from .. import xano_client as xano
 from ..dependencias import em_uso, mensagem_em_uso
-from ..models import TIPOS_FUNCIONARIO
+from ..constantes import TIPOS_FUNCIONARIO
 
 TABELA = "funcionarios"
 
