@@ -1,9 +1,11 @@
 """
-E-mails para os clientes, enviados pelo SendGrid (https://sendgrid.com).
+E-mails automáticos da loja, enviados pelo SendGrid (https://sendgrid.com).
 
 - Boas-vindas: quando um cliente com e-mail é cadastrado (tela Clientes).
 - Parabéns pela compra: quando uma moto da loja é marcada como "Vendida"
   para um cliente com e-mail (Produtos > Motos).
+- Boas-vindas à conta: quando um administrador cria uma conta de acesso
+  (tela Usuários do sistema). A senha nunca vai no e-mail.
 
 O envio sai do servidor do app direto para o SendGrid: não grava nada no
 Xano e não gasta requisições dele. É feito em segundo plano, então o
@@ -48,10 +50,12 @@ def _primeiro_nome(nome: str) -> str:
     return (nome or "").split(" ")[0] or "cliente"
 
 
-def _modelo_html(titulo: str, paragrafos: list[str]) -> str:
+def _modelo_html(titulo: str, paragrafos: list[str], motivo: str = "é cliente da {loja}") -> str:
     """Corpo do e-mail com a cara da loja (tabelas e estilos inline, que é o
-    que os programas de e-mail entendem). Os textos já vêm escapados."""
+    que os programas de e-mail entendem). Os textos já vêm escapados.
+    `motivo` completa o rodapé "Você recebeu este e-mail porque ..."."""
     loja = html.escape(_nome_loja())
+    motivo = motivo.format(loja=loja)
     corpo = "".join(
         f'<p style="margin:0 0 16px;font-size:16px;line-height:1.55;color:#e6e6e6">{p}</p>' for p in paragrafos
     )
@@ -69,7 +73,7 @@ def _modelo_html(titulo: str, paragrafos: list[str]) -> str:
 <p style="margin:24px 0 0;font-size:16px;color:#e6e6e6">Um abraço,<br><strong style="color:{_LARANJA}">Equipe {loja}</strong></p>
 </td></tr>
 </table>
-<p style="font-size:12px;color:#777;margin:14px 0 0">Você recebeu este e-mail porque é cliente da {loja}.</p>
+<p style="font-size:12px;color:#777;margin:14px 0 0">Você recebeu este e-mail porque {motivo}.</p>
 </td></tr></table>
 </body></html>"""
 
@@ -124,6 +128,29 @@ def boas_vindas(nome: str, email: str) -> bool:
              f"Precisando de qualquer coisa, é só chamar a nossa equipe. Bem-vindo(a) à família!\n\nEquipe {loja}")
     return _agendar(email, nome, f"Bem-vindo(a) à {loja}, {primeiro}!",
                     _modelo_html("Bem-vindo(a) à família!", paragrafos), texto)
+
+
+def boas_vindas_conta(nome: str, email: str) -> bool:
+    """Boas-vindas a quem ganhou uma conta de acesso ao sistema (tela Usuários
+    do sistema). Não recebe a senha de propósito: ela nunca vai por e-mail."""
+    primeiro = _primeiro_nome(nome)
+    loja = _nome_loja()
+    paragrafos = [
+        f"Olá, {html.escape(primeiro)}! Sua conta de acesso ao sistema da {html.escape(loja)} foi criada.",
+        f'Para entrar, use este e-mail (<strong style="color:{_LARANJA}">{html.escape(email)}</strong>) '
+        "e a senha que um administrador vai entregar a você pessoalmente.",
+        "No sistema você registra vendas, ordens de serviço, compras e cadastros, e acompanha o painel da loja. "
+        "Seja bem-vindo(a) à equipe!",
+    ]
+    texto = (f"Olá, {primeiro}! Sua conta de acesso ao sistema da {loja} foi criada.\n\n"
+             f"Para entrar, use este e-mail ({email}) e a senha que um administrador vai entregar a você "
+             "pessoalmente.\n\n"
+             "No sistema você registra vendas, ordens de serviço, compras e cadastros, e acompanha o painel da "
+             f"loja. Seja bem-vindo(a) à equipe!\n\nEquipe {loja}")
+    return _agendar(email, nome, f"Bem-vindo(a) à equipe {loja}, {primeiro}!",
+                    _modelo_html("Sua conta foi criada", paragrafos,
+                                 motivo="uma conta de acesso ao sistema da {loja} foi criada para você"),
+                    texto)
 
 
 def parabens_compra(nome: str, email: str, moto: str) -> bool:

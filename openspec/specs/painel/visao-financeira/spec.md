@@ -20,11 +20,7 @@ O card "Estoque de Produtos" SHALL mostrar a soma de quantidade × preço de ven
 - **THEN** ele não entra na soma
 
 ### Requirement: Faturamento separado entre motos e produtos
-O faturamento SHALL ser separado em duas categorias, considerando só vendas não canceladas:
-- motos: motos marcadas como Vendida, pelo preço de venda, na data de saída, e vendas antigas do tipo MOTO registradas sem itens;
-- produtos e serviços: todos os itens de venda, pelo valor do item (quantidade × valor unitário, já com o desconto dado no preço), sejam produtos do estoque ou itens avulsos como mão de obra; as ordens de serviço com a situação CONCLUIDA, pelo valor total da OS (peças e mão de obra), na data de conclusão; e vendas antigas sem itens dos tipos PECAS e BALCAO.
-
-Vendas dos tipos COMPRA e ORDEM_SERVICO MUST ficar de fora; as do tipo ORDEM_SERVICO porque a OS já conta pela própria conclusão. Uma OS concluída sem data de conclusão MUST ficar de fora. Os cards "Faturamento de Motos (mês)" e "Produtos e serviços (mês)" SHALL mostrar o mês corrente, e o card "Faturamento de hoje" o total do dia.
+O faturamento SHALL ser separado em motos e em produtos e serviços, só com vendas não canceladas. Motos: motos marcadas como Vendida, pelo preço de venda, na data de saída, e vendas antigas do tipo MOTO sem itens. Produtos e serviços: os itens de venda (produtos e avulsos, como mão de obra), pelo valor do item com o desconto já no preço; as ordens de serviço concluídas; e vendas antigas sem itens dos tipos PECAS e BALCAO. Registros do tipo COMPRA MUST ficar de fora.
 
 #### Scenario: Venda mista
 - **WHEN** uma venda tem dois produtos de R$ 500,00, um produto de R$ 90,00 e um item avulso de R$ 200,00
@@ -74,3 +70,21 @@ Os valores SHALL ser calculados sem erro de arredondamento de centavos e exibido
 #### Scenario: Três unidades de R$ 0,10
 - **WHEN** um produto tem 3 unidades de R$ 0,10 em estoque
 - **THEN** o estoque de produtos soma exatamente R$ 0,30
+
+### Requirement: Ordens de serviço no faturamento
+Uma ordem de serviço com a situação CONCLUIDA SHALL contar em produtos e serviços pelo valor total da OS (peças e mão de obra), na data de conclusão. Uma OS concluída sem data de conclusão MUST ficar de fora. Vendas do tipo ORDEM_SERVICO MUST ficar de fora, porque a OS já conta pela própria conclusão.
+
+#### Scenario: OS concluída antes de existir a data de conclusão
+- **WHEN** uma OS está CONCLUIDA, mas não tem data de conclusão
+- **THEN** o valor dela não entra no faturamento
+
+#### Scenario: Venda antiga do tipo ORDEM_SERVICO
+- **WHEN** existe uma venda antiga do tipo ORDEM_SERVICO
+- **THEN** ela não entra no faturamento, para a OS não contar em dobro
+
+### Requirement: Cards de faturamento
+Os cards "Faturamento de Motos (mês)" e "Produtos e serviços (mês)" SHALL mostrar o mês corrente, e o card "Faturamento de hoje" SHALL mostrar o total do dia (motos mais produtos e serviços).
+
+#### Scenario: Card de hoje
+- **WHEN** hoje houve uma venda de R$ 228,00 e uma moto vendida de R$ 100.000,00
+- **THEN** o card "Faturamento de hoje" mostra R$ 100.228,00

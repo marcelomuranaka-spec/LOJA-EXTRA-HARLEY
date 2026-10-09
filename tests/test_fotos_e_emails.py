@@ -75,5 +75,98 @@ class TestEmails(unittest.TestCase):
         self.assertNotIn("<b>Ana", corpo_html)  # nome do cliente é escapado no HTML
 
 
+class Resposta202:
+    status_code = 202
+    text = ""
+
+
+def _capturar_envio(destino: dict):
+    async def post(_self, url, json, headers):
+        destino.update(url=url, json=json, headers=headers)
+        return Resposta202()
+    return post
+
+
+CONFIGURADO = {"SENDGRID_API_KEY": "SG.teste", "SENDGRID_REMETENTE": "loja@exemplo.com"}
+SEM_CONFIGURACAO = {"SENDGRID_API_KEY": "", "SENDGRID_REMETENTE": ""}
+
+
+class TestBoasVindasConta(unittest.TestCase):
+    """Spec plataforma/boas-vindas-da-conta."""
+
+    def test_email_da_conta_sem_senha_e_com_nome_escapado(self):
+        enviado = {}
+
+        async def cenario():
+            with mock.patch.dict(os.environ, CONFIGURADO), mock.patch("httpx.AsyncClient.post", _capturar_envio(enviado)):
+                self.assertTrue(email_clientes.boas_vindas_conta("<i>Ana</i> Souza", "ana@exemplo.com"))
+                await asyncio.gather(*email_clientes._tarefas)
+
+        asyncio.run(cenario())
+        self.assertEqual(enviado["json"]["personalizations"][0]["to"][0]["email"], "ana@exemplo.com")
+        texto, corpo_html = (c["value"] for c in enviado["json"]["content"])
+        self.assertNotIn("<i>Ana", corpo_html)
+        self.assertIn("uma conta de acesso", corpo_html)
+        self.assertNotIn("é cliente", corpo_html)
+        self.assertIn("ana@exemplo.com", texto)
+        self.assertIn("pessoalmente", texto)
+
+    def test_email_de_cliente_mantem_o_rodape(self):
+        self.assertIn("porque é cliente da", email_clientes._modelo_html("t", ["p"]))
+
+
+class _UsuariosFalso:
+    """Faz o papel do UsuariosState em UsuariosState.salvar (sem o Reflex)."""
+
+    def __init__(self):
+        self.novo_nome_completo, self.novo_email = "Ana Souza", "Ana@Exemplo.com"
+        self.nova_senha = self.nova_confirmar_senha = "SenhaForte123"
+        self.erro = ""
+
+    async def _token_admin(self):
+        return "token-admin"
+
+    def limpar_formulario(self):
+        pass
+
+    async def carregar(self):
+        pass
+
+
+class TestCriarContaEnviaBoasVindas(unittest.IsolatedAsyncioTestCase):
+    async def _salvar(self, criar_usuario):
+        from harley_store.state import usuarios_state
+
+        estado = _UsuariosFalso()
+        envio = mock.MagicMock(side_effect=lambda nome, email: email_clientes.configurado())
+        with mock.patch.object(usuarios_state.admin, "criar_usuario", criar_usuario), \
+                mock.patch.object(usuarios_state.email_clientes, "boas_vindas_conta", envio), \
+                mock.patch.object(usuarios_state, "_senha_valida", lambda _s: True):
+            retorno = await usuarios_state.UsuariosState.salvar.fn(estado)
+        return estado, envio, retorno
+
+    async def test_conta_criada_envia_ao_email_da_conta(self):
+        with mock.patch.dict(os.environ, CONFIGURADO):
+            _estado, envio, retorno = await self._salvar(mock.AsyncMock())
+        envio.assert_called_once_with("Ana Souza", "ana@exemplo.com")
+        self.assertIn("E-mail de boas-vindas enviado.", str(retorno))
+
+    async def test_conta_recusada_nao_envia(self):
+        from harley_store import xano_admin_client
+
+        recusa = mock.AsyncMock(side_effect=xano_admin_client.ErroAdmin("already exists"))
+        with mock.patch.dict(os.environ, CONFIGURADO):
+            estado, envio, _ = await self._salvar(recusa)
+        envio.assert_not_called()
+        self.assertEqual(estado.erro, "Esse email já está cadastrado.")
+
+    async def test_sem_configuracao_cria_a_conta_sem_avisar_envio(self):
+        criar = mock.AsyncMock()
+        with mock.patch.dict(os.environ, SEM_CONFIGURACAO):
+            _estado, _envio, retorno = await self._salvar(criar)
+        criar.assert_awaited_once()
+        self.assertNotIn("E-mail de boas-vindas", str(retorno))
+
+
 if __name__ == "__main__":
     unittest.main()

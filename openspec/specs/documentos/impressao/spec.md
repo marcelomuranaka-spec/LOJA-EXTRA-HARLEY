@@ -20,11 +20,7 @@ Cada documento SHALL ser montado em formato de folha A4, com o cabeçalho da loj
 - **THEN** pode imprimir em papel A4 ou salvar como PDF
 
 ### Requirement: Tipos de documento
-O sistema SHALL gerar quatro documentos:
-- comprovante de venda, com os itens vendidos, o total e as assinaturas do vendedor e do cliente;
-- ordem de serviço, com a moto, o cliente, o mecânico, as peças e os serviços, e as assinaturas do mecânico e do cliente;
-- entrada de mercadoria, com o fornecedor, os itens comprados e as assinaturas de quem conferiu e do fornecedor;
-- documento da moto da loja: "Recibo de compra e venda de veículo", com o comprador, o valor da venda e o termo de declaração, quando a moto está Vendida; "Ficha do veículo" nas demais situações.
+O sistema SHALL gerar quatro documentos: comprovante de venda, ordem de serviço, entrada de mercadoria e documento da moto da loja. O documento da moto MUST se chamar "Recibo de compra e venda de veículo" quando a moto está Vendida, com o comprador, o valor da venda e o termo de declaração, e "Ficha do veículo" nas demais situações.
 
 #### Scenario: Recibo de moto vendida
 - **WHEN** o funcionário imprime uma moto com a situação Vendida
@@ -40,3 +36,14 @@ Quando o tipo ou o número do documento for inválido, ou o registro não existi
 #### Scenario: Registro excluído
 - **WHEN** alguém abre o endereço de impressão de uma moto que foi excluída
 - **THEN** aparece a mensagem de que a moto não foi encontrada
+
+### Requirement: Conteúdo dos documentos de operação
+O comprovante de venda SHALL trazer os itens vendidos, o total e as assinaturas do vendedor e do cliente. A ordem de serviço SHALL trazer a moto, o cliente, o mecânico, as peças e os serviços, e as assinaturas do mecânico e do cliente. A entrada de mercadoria SHALL trazer o fornecedor, os itens comprados e as assinaturas de quem conferiu e do fornecedor.
+
+#### Scenario: Comprovante de venda
+- **WHEN** o funcionário imprime uma venda
+- **THEN** o documento traz os itens vendidos, o total e os espaços de assinatura do vendedor e do cliente
+
+#### Scenario: Ordem de serviço impressa
+- **WHEN** o funcionário imprime uma ordem de serviço
+- **THEN** o documento traz a moto, o cliente, o mecânico, as peças e os serviços, e os espaços de assinatura do mecânico e do cliente

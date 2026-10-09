@@ -35,7 +35,7 @@ O endereço `/produtos?aba=motos` SHALL abrir a tela já na aba Motos, e o ender
 - **THEN** a tela abre mostrando os produtos
 
 ### Requirement: Categorias do produto
-A categoria do produto SHALL ser escolhida entre as sugeridas (Peças, Vestuário, Consumíveis, Acessórios, Motores, Pneus, Lubrificantes e Outros) e as já existentes, ou digitada como uma categoria nova. Uma categoria digitada com outra grafia de uma existente (por exemplo, "peças" e "Peças") MUST usar a grafia existente. As categorias "Moto", "Motos", "Motocicleta" e "Motocicletas" MUST ser recusadas para produto, com a orientação de cadastrar motos na aba Motos; um produto antigo que já esteja numa dessas categorias continua podendo ser editado.
+A categoria do produto SHALL ser escolhida entre as sugeridas (Peças, Vestuário, Consumíveis, Acessórios, Motores, Pneus, Lubrificantes e Outros) e as já existentes, ou digitada como uma categoria nova. Uma categoria digitada com outra grafia de uma existente (por exemplo, "peças" e "Peças") MUST usar a grafia existente. Categorias de moto MUST ser recusadas para produto.
 
 #### Scenario: Categoria nova
 - **WHEN** o funcionário digita a categoria "Ferramentas", que ainda não existe, e salva o produto
@@ -51,3 +51,14 @@ A lista de produtos SHALL permitir buscar por nome ou descrição e mostrar só 
 #### Scenario: Só estoque baixo
 - **WHEN** o funcionário liga "Só estoque baixo"
 - **THEN** aparecem só os produtos com 5 unidades ou menos
+
+### Requirement: Motos fora do catálogo de produtos
+As categorias "Moto", "Motos", "Motocicleta" e "Motocicletas" MUST ser recusadas para produto, com a orientação de cadastrar motos na aba Motos. Um produto antigo que já esteja numa dessas categorias SHALL continuar podendo ser editado.
+
+#### Scenario: Categoria Motocicleta
+- **WHEN** o funcionário tenta salvar um produto novo com a categoria "Motocicleta"
+- **THEN** o produto é recusado com a orientação de cadastrar motos na aba Motos
+
+#### Scenario: Produto antigo na categoria Motos
+- **WHEN** o funcionário edita o preço de um produto antigo que já está na categoria "Motos"
+- **THEN** a alteração é salva

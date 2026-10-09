@@ -32,14 +32,18 @@ rules:
   proposal:
     - Deixar explícito o que está fora do escopo.
   specs:
-    - Organizar as capacidades por domínio (openspec/specs/<domínio>/<capacidade>).
+    - Organizar as capacidades por domínio
+      (openspec/specs/<domínio>/<capacidade>).
   tasks:
     - Incluir uma tarefa de verificação (teste automático ou conferência no app).
 
 operations:
   apply:
     guidance:
-      - Rodar .venv\Scripts\python.exe -m unittest discover -s tests -t . antes de concluir.
+      - Rodar .venv\Scripts\python.exe -m unittest discover -s tests -t . antes
+        de concluir.
   archive:
     guidance:
       - Confirmar que a implementação corresponde às specs antes de arquivar.
+githubCopilot:
+  cloudAgent: false

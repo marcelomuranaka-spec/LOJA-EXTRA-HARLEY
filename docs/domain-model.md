@@ -129,8 +129,11 @@ Conta usada para entrar no sistema.
 - **Principais informações:** nome, e-mail, senha, perfil
   (Administrador ou Funcionário).
 - **Regras:** só administradores criam e gerenciam contas; ninguém altera
-  o próprio perfil nem exclui a própria conta. Existe uma conta de serviço
-  usada pelo servidor do sistema para acessar os dados.
+  o próprio perfil nem exclui a própria conta. A conta nova recebe um
+  e-mail de boas-vindas, sem a senha. Existe uma conta de serviço usada
+  pelo servidor do sistema para acessar os dados.
+- **Diferença para Funcionário:** o funcionário é o cadastro de RH (sem
+  login e sem e-mail); quem usa o sistema precisa de uma conta de usuário.
 
 ## Conceitos derivados (calculados, não armazenados)
 

@@ -21,7 +21,7 @@ Transações (Vendas), Ordens de Serviço e Itens de Ordem de Serviço.
 - [Segurança da API do Xano e conta de serviço](#segurança-da-api-do-xano-e-conta-de-serviço)
 - [Spinner de carregamento nos botões](#spinner-de-carregamento-nos-botões)
 - [Fotos](#fotos)
-- [E-mails aos clientes (SendGrid)](#e-mails-aos-clientes-sendgrid)
+- [E-mails automáticos (SendGrid)](#e-mails-automáticos-sendgrid)
 - [Histórico de estoque](#histórico-de-estoque)
 - [OpenSpec](#openspec)
 - [Backup](#backup)
@@ -284,7 +284,8 @@ C:\LOJA-EXTRA-HARLEY\
 ├── xano_import/             ← CSVs da importação inicial dos dados para o Xano
 ├── openspec/                ← especificações (specs/) e mudanças (changes/), ver OpenSpec
 ├── .agents/skills/          ← Agent Skills do Reflex (npx skills add reflex-dev/agent-skills)
-└── .claude/                 ← comandos e skills do OpenSpec e cópia das skills do Reflex
+├── .github/                 ← workflows do OpenSpec para o GitHub Copilot (prompts/ e skills/)
+└── .claude/                 ← workflows do OpenSpec para o Claude Code e cópia das skills do Reflex
 ```
 
 Cada tela é **sempre** o par `state/algo_state.py` + `pages/algo.py`. O
@@ -389,6 +390,10 @@ simulado, incluindo vendas simultâneas):
   funcionário comum recebe "sem permissão" mesmo chamando a API direto.
 - Ninguém altera o próprio perfil nem exclui a própria conta, então sempre
   sobra ao menos um administrador.
+- Toda conta nova recebe um e-mail de boas-vindas no e-mail cadastrado
+  (ver [E-mails automáticos (SendGrid)](#e-mails-automáticos-sendgrid)).
+  Funcionários (tela Funcionários) são o cadastro de RH, sem login e sem
+  e-mail: quem usa o sistema precisa de uma conta de usuário.
 
 ## Segurança da API do Xano e conta de serviço
 
@@ -468,12 +473,16 @@ observa as mensagens do websocket do Reflex, e o visual fica em
 - Ao excluir uma moto, a foto continua guardada no Xano (o plano não
   oferece exclusão de arquivo pela API); isso não aparece para ninguém.
 
-## E-mails aos clientes (SendGrid)
+## E-mails automáticos (SendGrid)
 
 O app envia, pelo [SendGrid](https://sendgrid.com), um e-mail de
 **boas-vindas** quando um cliente com e-mail é cadastrado e um de
 **parabéns pela compra** quando uma moto da loja é marcada como Vendida para
-um cliente com e-mail. O envio sai direto do servidor do app (não usa o
+um cliente com e-mail. Quando um administrador cria uma **conta de acesso**
+(tela Usuários do sistema), a pessoa recebe no e-mail da conta um
+**e-mail de boas-vindas à equipe**, que explica que o login é o próprio
+e-mail e que a senha é entregue pessoalmente (a senha nunca vai no e-mail).
+O envio sai direto do servidor do app (não usa o
 Xano), em segundo plano: uma falha só aparece no log e nunca desfaz o
 cadastro ou a venda. Para ligar, acrescente ao `.env` de cada pasta (produção
 e desenvolvimento):
@@ -515,18 +524,20 @@ recebe vem de quatro documentos:
 | `AGENTS.md` | Como o agente deve trabalhar neste projeto? |
 | `openspec/config.yaml` | Que contexto, regras (`rules`) e orientações (`operations`) os workflows recebem? |
 
-Os comandos do OpenSpec para o Claude Code ficam em `.claude/` (instalados
-pelo `openspec init`).
+Os workflows do OpenSpec (OpenSpec 1.14.1) ficam em `.claude/` (Claude Code)
+e em `.github/` (GitHub Copilot), instalados pelo `openspec init`. Para
+reinstalá-los depois de atualizar o OpenSpec: `openspec update`.
 
 - **`openspec/specs/`** — o comportamento atual do sistema, organizado por
   domínio: `plataforma/`, `vendas/`, `estoque/`, `cadastros/`, `clientes/`,
   `compras/`, `documentos/`, `motos/`, `oficina/`, `painel/` e `produtos/`.
-- **`openspec/changes/`** — mudanças em andamento. Hoje está aberta a
-  `acesso-em-rede-local` (19 de 27 tarefas): as verificações que faltam
-  exigem a produção ligada na rede da loja.
+- **`openspec/changes/`** — mudanças em andamento (nenhuma aberta em
+  09/10/2026).
 - **`openspec/changes/archive/`** — mudanças concluídas, com proposta,
   desenho e tarefas. A data no nome de cada pasta é o dia em que o recurso
-  ficou pronto (conforme os commits).
+  ficou pronto (conforme os commits). A `acesso-em-rede-local` foi arquivada
+  incompleta, por decisão do grupo: as verificações que exigem a produção
+  ligada na rede da loja estão listadas no `tasks.md` dela.
 
 Toda mudança no sistema passa pelo fluxo:
 
@@ -535,7 +546,12 @@ Toda mudança no sistema passa pelo fluxo:
    desenho e as tarefas;
 3. **revisão** — o grupo lê e aprova ou corrige os artefatos;
 4. `/opsx:apply` — implementa as tarefas, marcando cada uma;
-5. `/opsx:archive` — atualiza `openspec/specs/` e arquiva a mudança.
+5. `/opsx:verify` — confere se o que foi feito corresponde às especificações,
+   às tarefas e ao desenho;
+6. `/opsx:archive` — atualiza `openspec/specs/` e arquiva a mudança.
+
+No GitHub Copilot os mesmos comandos usam hífen: `/opsx-propose`,
+`/opsx-apply`, `/opsx-verify` etc.
 
 Para consultar: `openspec list` (mudanças abertas), `openspec list --specs`
 (especificações) e `openspec validate --all --strict` (validação).

@@ -14,6 +14,7 @@ import logging
 
 import reflex as rx
 
+from .. import email_clientes
 from .. import xano_admin_client as admin
 from ..validacao import validar_email
 from .auth_state import AuthState, _MENSAGEM_SENHA_INVALIDA, _senha_valida
@@ -102,9 +103,13 @@ class UsuariosState(rx.State):
                          else "Não foi possível criar a conta. Verifique os dados e tente novamente.")
             return
         log.info("conta criada por admin: %s", email)
+        mensagem = f"Conta de {nome_completo} criada (perfil Funcionário)."
+        # Só depois da conta criada; a senha nunca vai no e-mail.
+        if email_clientes.boas_vindas_conta(nome_completo, email):
+            mensagem += " E-mail de boas-vindas enviado."
         self.limpar_formulario()
         await self.carregar()
-        return rx.toast.success(f"Conta de {nome_completo} criada (perfil Funcionário).")
+        return rx.toast.success(mensagem)
 
     @rx.event
     async def atualizar_email(self, usuario_id: str, novo_email: str):

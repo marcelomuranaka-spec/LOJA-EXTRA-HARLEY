@@ -12,7 +12,7 @@ Regras de trabalho para qualquer agente de IA que atue neste projeto.
 ## Desenvolvimento com OpenSpec
 
 - Toda mudança de comportamento passa pelo ciclo do OpenSpec:
-  explore → propose → revisão do grupo → apply → archive.
+  explore → propose → revisão do grupo → apply → verify → archive.
 - Não implementar durante o propose; esperar a aprovação do grupo.
 - Se a implementação exigir algo fora do que a change descreve, parar e
   perguntar, em vez de improvisar.

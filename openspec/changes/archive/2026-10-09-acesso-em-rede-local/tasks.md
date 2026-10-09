@@ -2,6 +2,8 @@
 
 Situação em 07/10/2026: a change continua aberta. A produção funcionou na rede da loja em 24 e 25/09/2026, mas foi pausada em 25/09/2026, quando o sistema passou ao "modo demonstração" (só `reflex run` no próprio notebook; a tarefa agendada `HarleyStore-Producao` está desativada). As tarefas pendentes abaixo exigem a produção ligada, outro aparelho na rede e acesso ao roteador; elas só podem ser concluídas quando a loja decidir voltar a usar o notebook como servidor.
 
+**Arquivada incompleta em 09/10/2026, por decisão do grupo (Marcelo):** 19 de 27 tarefas feitas. As 8 pendentes (1.6, 5.1 a 5.6 e o tempo de subida da 6.1) continuam sem verificação. Se a loja voltar a usar o notebook como servidor, abrir uma nova change para essas verificações. Os requisitos desta change entram em `openspec/specs/plataforma/acesso-em-rede-local/` como comportamento previsto, ainda não verificado de outro aparelho nem após reiniciar.
+
 Legenda: **[você]** = feito pelo usuário, ou com autorização explícita dele, porque exige o roteador ou privilégio de administrador do Windows.
 
 ## 1. Pré-requisitos do ambiente

@@ -38,6 +38,8 @@ cadernos, anotações). Isso gera:
 | **Funcionário** (vendedor, mecânico) | Opera o dia a dia: vendas, ordens de serviço, compras, cadastros e consulta ao painel. |
 | **Cliente da loja** | Não acessa o sistema; recebe e-mails (boas-vindas e parabéns pela compra de moto). |
 
+Cada conta de acesso nova recebe um e-mail de boas-vindas no e-mail cadastrado (sem a senha, que é entregue pessoalmente).
+
 ## 5. Escopo
 
 **Dentro do escopo:**
@@ -72,8 +74,8 @@ cadernos, anotações). Isso gera:
 - **Compras:** entrada de mercadoria de fornecedores, somando no estoque.
 - **Impressão:** comprovante de venda, ordem de serviço, entrada de
   mercadoria e ficha/recibo da moto em A4.
-- **E-mails:** boas-vindas ao cliente cadastrado e parabéns a quem compra
-  uma moto.
+- **E-mails:** boas-vindas ao cliente cadastrado, parabéns a quem compra
+  uma moto e boas-vindas a quem ganha uma conta de acesso ao sistema.
 
 ## 7. Requisitos e restrições importantes
 
