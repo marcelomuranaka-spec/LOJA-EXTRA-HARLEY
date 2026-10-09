@@ -21,6 +21,7 @@ import asyncio
 
 from . import estoque
 from . import xano_client as xano
+from .constantes import TIPOS_VENDA
 
 TABELA = "transacoes"
 TABELA_ITENS = "itens_transacao"
@@ -78,6 +79,9 @@ async def registrar_venda(
 ) -> int:
     """itens: [{id_produto (0 = avulso), descricao, quantidade, valor_unitario}].
     Devolve o id da venda. Levanta FalhaVenda com mensagem para o usuário."""
+    # Conferido aqui, e não só na tela: o tipo pode chegar direto pelo websocket.
+    if tipo not in TIPOS_VENDA:
+        raise FalhaVenda(f"Tipo de venda inválido: {tipo or '(vazio)'}. Use {', '.join(TIPOS_VENDA)}.")
     if not itens:
         raise FalhaVenda("Adicione ao menos um item à venda.")
 

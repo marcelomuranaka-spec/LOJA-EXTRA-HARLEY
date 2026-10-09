@@ -71,7 +71,11 @@ Transações (Vendas), Ordens de Serviço e Itens de Ordem de Serviço.
   contra vendas simultâneas do mesmo produto. Vendas **não são apagadas**:
   são **canceladas** (uma ou várias de uma vez, com motivo opcional),
   continuam no histórico como "Cancelada", saem do faturamento e devolvem
-  os produtos ao estoque.
+  os produtos ao estoque. O **tipo** da venda é BALCAO, PECAS ou MOTO
+  (MOTO = peças e serviços para a moto do cliente; conta em Produtos no
+  Painel). A moto da loja é vendida em Produtos > Motos, e compras ficam na
+  tela Compras; os tipos antigos COMPRA e ORDEM_SERVICO só aparecem em
+  vendas registradas antes de 09/10/2026.
 - **Ordens de serviço** — abre OS vinculada a uma moto e um mecânico, permite
   lançar peças usadas (que também baixam o estoque) e serviços / mão de
   obra (descrição e valor, sem estoque), e trocar o status

@@ -21,7 +21,7 @@ import reflex as rx
 
 from .. import vendas_servico as servico
 from .. import xano_client as xano
-from ..constantes import TIPOS_TRANSACAO
+from ..constantes import TIPOS_VENDA
 from .auth_state import AuthState
 
 TABELA = "transacoes"
@@ -66,7 +66,7 @@ class VendasState(rx.State):
     produtos_opcoes: list[str] = []
 
     # cabeçalho da venda
-    tipo_transacao: str = TIPOS_TRANSACAO[0]
+    tipo_transacao: str = TIPOS_VENDA[0]
     funcionario_selecionado: str = ""
     cliente_selecionado: str = SEM_CLIENTE
     moto_selecionada: str = SEM_MOTO
@@ -228,7 +228,7 @@ class VendasState(rx.State):
 
     @rx.event
     def nova_venda(self):
-        self.tipo_transacao = TIPOS_TRANSACAO[0]
+        self.tipo_transacao = TIPOS_VENDA[0]
         self.cliente_selecionado = SEM_CLIENTE
         self.moto_selecionada = SEM_MOTO
         self.carrinho = []

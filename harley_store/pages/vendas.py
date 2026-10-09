@@ -2,7 +2,7 @@ import reflex as rx
 
 from ..components.botao_imprimir import botao_imprimir
 from ..components.layout import page
-from ..constantes import TIPOS_TRANSACAO
+from ..constantes import TIPOS_VENDA
 from ..state.vendas_state import VendasState
 
 
@@ -122,7 +122,7 @@ def _formulario() -> rx.Component:
         rx.vstack(
             rx.heading("Registrar venda", size="4"),
             rx.grid(
-                _rotulo("Tipo", rx.select(TIPOS_TRANSACAO, value=VendasState.tipo_transacao,
+                _rotulo("Tipo", rx.select(TIPOS_VENDA, value=VendasState.tipo_transacao,
                                           on_change=VendasState.set_tipo_transacao, width="100%"), width="100%"),
                 _rotulo("Funcionário", rx.select(VendasState.funcionarios_opcoes,
                                                  value=VendasState.funcionario_selecionado,
