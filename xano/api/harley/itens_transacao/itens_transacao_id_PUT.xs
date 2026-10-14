@@ -18,6 +18,7 @@ query "itens_transacao/{itens_transacao_id}" verb=PUT {
       data = {
         transacao_id  : $input.transacao_id
         produto_id    : $input.produto_id
+        moto_id       : $input.moto_id
         descricao     : $input.descricao
         quantidade    : $input.quantidade
         valor_unitario: $input.valor_unitario

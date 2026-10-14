@@ -3,7 +3,7 @@ import reflex as rx
 from ..components.botao_imprimir import botao_imprimir
 from ..components.layout import page
 from ..constantes import TIPOS_VENDA
-from ..state.vendas_state import VendasState
+from ..state.vendas_state import SEM_CLIENTE, VendasState
 
 
 # ------------------------------------------------------------------ cancelamento
@@ -96,7 +96,11 @@ def _linha_carrinho(item: dict, indice: int) -> rx.Component:
     return rx.table.row(
         rx.table.cell(
             rx.hstack(
-                rx.cond(item["id_produto"] == "0", rx.badge("avulso", variant="soft", color_scheme="gray")),
+                rx.cond(
+                    item["id_moto"] != "0",
+                    rx.badge(rx.icon("bike", size=12), "moto", variant="soft", color_scheme="orange"),
+                    rx.cond(item["id_produto"] == "0", rx.badge("avulso", variant="soft", color_scheme="gray")),
+                ),
                 rx.text(item["descricao"]),
                 spacing="2",
                 align="center",
@@ -117,6 +121,59 @@ def _rotulo(texto: str, campo: rx.Component, **props) -> rx.Component:
                      spacing="1", align="start", **props)
 
 
+def _dado_moto(rotulo: str, valor) -> rx.Component:
+    return rx.vstack(
+        rx.text(rotulo, size="1", color=rx.color("gray", 10)),
+        rx.text(rx.cond(valor != "", valor, "—"), size="2", weight="medium"),
+        spacing="0",
+        align="start",
+    )
+
+
+def _moto_escolhida() -> rx.Component:
+    """Foto, preço e dados da moto da loja escolhida, antes de entrar na venda."""
+    moto = VendasState.moto_loja
+    return rx.card(
+        rx.flex(
+            rx.cond(
+                moto["foto_url"] != "",
+                rx.image(src=moto["foto_url"], width="180px", height="120px", object_fit="cover",
+                         border_radius="6px"),
+                rx.center(rx.icon("bike", size=40, color=rx.color("gray", 8)), width="180px", height="120px"),
+            ),
+            rx.vstack(
+                rx.hstack(
+                    rx.heading(moto["marca"], " ", moto["modelo"], " ", moto["ano"], size="3"),
+                    rx.badge(moto["status"], variant="soft"),
+                    spacing="2",
+                    align="center",
+                    wrap="wrap",
+                ),
+                rx.text("R$ ", moto["preco_venda"], size="5", weight="bold"),
+                rx.grid(
+                    _dado_moto("Cor", moto["cor"]),
+                    _dado_moto("Placa", moto["placa"]),
+                    _dado_moto("Chassi", moto["chassi"]),
+                    _dado_moto("RENAVAM", moto["renavam"]),
+                    _dado_moto("Cilindrada (cm³)", moto["cilindrada"]),
+                    _dado_moto("Quilometragem", moto["quilometragem"]),
+                    columns=rx.breakpoints(initial="2", sm="3"),
+                    spacing="3",
+                    width="100%",
+                ),
+                spacing="2",
+                align="start",
+                width="100%",
+            ),
+            direction=rx.breakpoints(initial="column", sm="row"),
+            spacing="4",
+            width="100%",
+        ),
+        width="100%",
+        variant="surface",
+    )
+
+
 def _formulario() -> rx.Component:
     return rx.card(
         rx.vstack(
@@ -132,7 +189,8 @@ def _formulario() -> rx.Component:
                                              on_change=VendasState.set_cliente_selecionado, width="100%"),
                         width="100%"),
                 _rotulo("Moto do cliente", rx.select(VendasState.motos_opcoes, value=VendasState.moto_selecionada,
-                                                     on_change=VendasState.set_moto_selecionada, width="100%"),
+                                                     on_change=VendasState.set_moto_selecionada, width="100%",
+                                                     disabled=VendasState.tem_moto_no_carrinho),
                         width="100%"),
                 columns=rx.breakpoints(initial="1", sm="2", md="4"),
                 spacing="3",
@@ -140,6 +198,24 @@ def _formulario() -> rx.Component:
             ),
             rx.divider(),
             rx.text("Itens da venda", size="3", weight="bold"),
+            # moto do estoque da loja (preço e dados do cadastro)
+            rx.hstack(
+                _rotulo("Moto da loja", rx.select(VendasState.motos_loja_opcoes,
+                                                  value=VendasState.moto_loja_selecionada,
+                                                  on_change=VendasState.definir_moto_loja,
+                                                  placeholder="Escolha uma moto do estoque", width="100%"),
+                        flex="1", min_width="220px"),
+                rx.button(rx.icon("plus", size=16), "Adicionar moto", on_click=VendasState.adicionar_moto,
+                          variant="soft", color_scheme="orange"),
+                spacing="3",
+                align="end",
+                wrap="wrap",
+                width="100%",
+            ),
+            rx.cond(VendasState.moto_loja.contains("id"), _moto_escolhida()),
+            rx.cond(VendasState.tem_moto_no_carrinho & (VendasState.cliente_selecionado == SEM_CLIENTE),
+                    rx.text("Escolha o cliente comprador da moto: ela será cadastrada em Motos dos clientes.",
+                            size="2", color=rx.color("orange", 11))),
             # produto do estoque
             rx.hstack(
                 _rotulo("Produto", rx.select(VendasState.produtos_opcoes, value=VendasState.produto_selecionado,

@@ -27,6 +27,9 @@ REFERENCIAS: dict[str, list[tuple[str, str, str]]] = {
         ("transacoes", "id_funcionario", "vendas"),
         ("ordens_servico", "id_funcionario", "ordens de serviço"),
     ],
+    "motos": [
+        ("itens_transacao", "moto_id", "vendas"),
+    ],
     "motos_clientes": [
         ("ordens_servico", "id_moto_cliente", "ordens de serviço"),
         ("transacoes", "id_moto_cliente", "vendas"),

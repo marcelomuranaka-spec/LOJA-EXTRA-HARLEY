@@ -31,6 +31,7 @@ import reflex as rx
 
 from .. import email_clientes
 from .. import xano_client as xano
+from ..dependencias import em_uso, mensagem_em_uso
 from ..fotos_oficiais import foto_oficial
 from ..validacao import inteiro, numero, validar_imagem
 
@@ -493,6 +494,9 @@ class MotosLojaState(rx.State):
 
     @rx.event
     async def excluir(self, moto_id: str):
+        usos = await em_uso(TABELA, int(moto_id))
+        if usos:
+            return rx.toast.error(mensagem_em_uso("esta moto", usos))
         await xano.excluir(TABELA, int(moto_id))
         if self.form_id == int(moto_id):
             self.novo()

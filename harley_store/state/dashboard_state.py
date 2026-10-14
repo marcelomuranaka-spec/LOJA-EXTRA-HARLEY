@@ -18,8 +18,8 @@ Visão financeira (motos x produtos) — regras aprovadas pelo dono da loja:
 - Faturamento (só vendas não canceladas; o valor dos itens já é líquido,
   pois o desconto é dado no preço unitário):
     * Motos: motos marcadas "Vendida", pelo preço de venda, na data de saída
-      (vender moto da loja não gera registro em transacoes) + vendas antigas
-      do tipo MOTO sem itens.
+      (vendidas em Produtos > Motos ou no Balcão) + vendas antigas do tipo MOTO
+      sem itens. O item de venda que é moto da loja (moto_id) não conta de novo.
     * Produtos e serviços: itens das vendas (produtos do estoque e itens
       avulsos, como mão de obra); OS CONCLUIDAS, com peças + mão de obra, na
       data de conclusão (`data_conclusao`); vendas antigas sem itens dos tipos
@@ -42,7 +42,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import reflex as rx
 
 from .. import xano_client as xano
-from ..vendas_servico import CAMPO_PRODUTO, CAMPO_VENDA, esta_cancelada
+from ..vendas_servico import CAMPO_MOTO, CAMPO_PRODUTO, CAMPO_VENDA, esta_cancelada
 from .produtos_state import LIMITE_ESTOQUE_BAIXO  # uma só regra de "estoque baixo"
 
 log = logging.getLogger("harley_store.painel")
@@ -108,6 +108,8 @@ def lancamentos_faturamento(transacoes: list[dict], itens: list[dict], motos: li
         itens_da_venda = itens_por_venda.get(int(t["id"]))
         if itens_da_venda:
             for item in itens_da_venda:  # produto do estoque ou avulso (mão de obra)
+                if int(item.get(CAMPO_MOTO) or 0):
+                    continue  # moto da loja: conta pela própria moto (Vendida), logo abaixo
                 lancamentos.append((data, "produtos",
                                     int(item.get("quantidade") or 0) * _dec(item.get("valor_unitario"))))
         elif tipo in TIPOS_LEGADO_MOTOS:

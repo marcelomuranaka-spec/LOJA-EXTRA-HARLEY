@@ -67,8 +67,10 @@ Cada conta de acesso nova recebe um e-mail de boas-vindas no e-mail cadastrado (
   com o estoque de motos à venda.
 - **Clientes e motos dos clientes:** cadastro e vínculo cliente → moto, com
   a foto oficial do modelo.
-- **Vendas / Balcão:** venda com vários itens (produtos e mão de obra),
-  baixa de estoque na hora e cancelamento com devolução ao estoque.
+- **Vendas / Balcão:** venda com vários itens (produtos, mão de obra e uma
+  moto da loja, com preço e dados do cadastro), baixa de estoque na hora e
+  cancelamento com devolução ao estoque. A moto vendida passa para as
+  motos do cliente.
 - **Ordens de serviço:** peças usadas e mão de obra; ao concluir, o valor
   entra no faturamento do dia.
 - **Compras:** entrada de mercadoria de fornecedores, somando no estoque.

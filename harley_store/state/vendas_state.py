@@ -13,6 +13,10 @@ estoque manualmente.
 
 Observação: por causa da importação por CSV, "sem cliente/moto" em
 `transacoes` é `0`, não `null`.
+
+Moto da loja (tabela `motos`): o Balcão lista as disponíveis, mostra preço e
+dados, e a moto entra no carrinho como item com `id_moto` (no máximo uma por
+venda, com cliente). O servidor relê preço e dados (vendas_servico).
 """
 
 import asyncio
@@ -23,6 +27,7 @@ from .. import vendas_servico as servico
 from .. import xano_client as xano
 from ..constantes import TIPOS_VENDA
 from .auth_state import AuthState
+from .motos_loja_state import _linha_moto
 
 TABELA = "transacoes"
 TABELA_ITENS = "itens_transacao"
@@ -30,6 +35,11 @@ TABELA_FUNCIONARIOS = "funcionarios"
 TABELA_CLIENTES = "clientes"
 TABELA_MOTOS = "motos_clientes"
 TABELA_PRODUTOS = "produtos"
+TABELA_MOTOS_LOJA = "motos"
+
+# dados da moto da loja mostrados no Balcão (vêm de motos_loja_state._linha_moto)
+CAMPOS_MOTO_LOJA = ("id", "marca", "modelo", "ano", "cor", "placa", "chassi", "renavam", "cilindrada",
+                    "quilometragem", "status", "preco_venda", "foto_url")
 
 SEM_CLIENTE = "— nenhum —"
 SEM_MOTO = "— nenhuma —"
@@ -64,6 +74,7 @@ class VendasState(rx.State):
     clientes_opcoes: list[str] = []
     motos_opcoes: list[str] = []
     produtos_opcoes: list[str] = []
+    motos_loja_opcoes: list[str] = []
 
     # cabeçalho da venda
     tipo_transacao: str = TIPOS_VENDA[0]
@@ -71,8 +82,10 @@ class VendasState(rx.State):
     cliente_selecionado: str = SEM_CLIENTE
     moto_selecionada: str = SEM_MOTO
 
-    # carrinho: [{id_produto, descricao, quantidade, valor_unitario, subtotal}] (strings para a tela)
+    # carrinho: [{id_produto, id_moto, descricao, quantidade, valor_unitario, subtotal}] (strings para a tela)
     carrinho: list[dict] = []
+    moto_loja_selecionada: str = ""
+    moto_loja: dict[str, str] = {}  # dados da moto escolhida ({} = nenhuma)
     produto_selecionado: str = ""
     item_quantidade: str = "1"
     item_preco: str = ""
@@ -91,11 +104,16 @@ class VendasState(rx.State):
     _precos: dict[int, float] = {}
     _estoques: dict[int, int] = {}
     _nomes: dict[int, str] = {}
+    _motos_loja: dict[int, dict] = {}  # registros das motos disponíveis, por id
 
     @rx.var
     def total_carrinho(self) -> str:
         total = sum(int(i["quantidade"]) * _numero(i["valor_unitario"]) for i in self.carrinho)
         return _moeda(total)
+
+    @rx.var
+    def tem_moto_no_carrinho(self) -> bool:
+        return any(i["id_moto"] != "0" for i in self.carrinho)
 
     @rx.var
     def qtd_selecionadas(self) -> int:
@@ -105,9 +123,9 @@ class VendasState(rx.State):
 
     @rx.event
     async def carregar(self):
-        funcionarios, clientes, motos, produtos, transacoes = await asyncio.gather(
+        funcionarios, clientes, motos, produtos, transacoes, motos_loja = await asyncio.gather(
             xano.listar(TABELA_FUNCIONARIOS), xano.listar(TABELA_CLIENTES), xano.listar(TABELA_MOTOS),
-            xano.listar(TABELA_PRODUTOS), xano.listar(TABELA),
+            xano.listar(TABELA_PRODUTOS), xano.listar(TABELA), xano.listar(TABELA_MOTOS_LOJA),
         )
         try:
             itens = await xano.listar(TABELA_ITENS)
@@ -132,6 +150,17 @@ class VendasState(rx.State):
         ]
         if not self.funcionario_selecionado and self.funcionarios_opcoes:
             self.funcionario_selecionado = self.funcionarios_opcoes[0]
+
+        disponiveis = sorted(
+            (m for m in motos_loja if (m.get("status") or servico.MOTO_EM_ESTOQUE) not in servico.MOTOS_FORA_DA_VENDA),
+            key=lambda m: ((m.get("marca") or "").lower(), (m.get("modelo") or "").lower(), m.get("ano") or 0),
+        )
+        self._motos_loja = {m["id"]: m for m in disponiveis}
+        self.motos_loja_opcoes = [
+            f"{m['id']} - {servico.nome_moto(m)} — R$ {_moeda(float(m.get('preco_venda') or 0))}" for m in disponiveis
+        ]
+        if self.moto_loja_selecionada not in self.motos_loja_opcoes:
+            self.moto_loja_selecionada, self.moto_loja = "", {}
 
         nomes_funcionario = {f["id"]: f["nome_funcionario"] for f in funcionarios}
         nomes_cliente = {c["id"]: c["nome_cliente"] for c in clientes}
@@ -193,6 +222,7 @@ class VendasState(rx.State):
             return
         self.carrinho = self.carrinho + [{
             "id_produto": str(pid),
+            "id_moto": "0",
             "descricao": self._nomes.get(pid, f"Produto {pid}"),
             "quantidade": str(qtd),
             "valor_unitario": _moeda(preco),
@@ -215,12 +245,51 @@ class VendasState(rx.State):
             return
         self.carrinho = self.carrinho + [{
             "id_produto": "0",
+            "id_moto": "0",
             "descricao": descricao,
             "quantidade": str(qtd),
             "valor_unitario": _moeda(valor),
             "subtotal": _moeda(qtd * valor),
         }]
         self.avulso_descricao, self.avulso_quantidade, self.avulso_valor = "", "1", ""
+
+    @rx.event
+    def definir_moto_loja(self, valor: str):
+        self.moto_loja_selecionada = valor
+        try:
+            moto = self._motos_loja.get(int(valor.split(" - ")[0]))
+        except ValueError:
+            moto = None
+        linha = _linha_moto(moto, {}) if moto else {}
+        self.moto_loja = {campo: linha[campo] for campo in CAMPOS_MOTO_LOJA} if linha else {}
+
+    @rx.event
+    def adicionar_moto(self):
+        """A moto entra pelo preço do cadastro; o servidor confere tudo de novo ao registrar."""
+        self.erro_venda = self.sucesso_venda = ""
+        if not self.moto_loja:
+            self.erro_venda = "Escolha uma moto da loja."
+            return
+        if self.tem_moto_no_carrinho:
+            self.erro_venda = "Só é possível vender uma moto da loja por venda."
+            return
+        moto = self._motos_loja.get(int(self.moto_loja["id"]))
+        problema = servico.problema_moto(moto)
+        if problema:
+            self.erro_venda = problema
+            return
+        preco = float(moto["preco_venda"])
+        self.carrinho = self.carrinho + [{
+            "id_produto": "0",
+            "id_moto": str(moto["id"]),
+            "descricao": servico.descricao_moto(moto),
+            "quantidade": "1",
+            "valor_unitario": _moeda(preco),
+            "subtotal": _moeda(preco),
+        }]
+        self.tipo_transacao = "MOTO"
+        self.moto_selecionada = SEM_MOTO  # a moto comprada vira a moto do cliente ao registrar
+        self.moto_loja_selecionada, self.moto_loja = "", {}
 
     @rx.event
     def remover_item(self, indice: int):
@@ -235,6 +304,7 @@ class VendasState(rx.State):
         self.produto_selecionado = ""
         self.item_quantidade, self.item_preco = "1", ""
         self.avulso_descricao, self.avulso_quantidade, self.avulso_valor = "", "1", ""
+        self.moto_loja_selecionada, self.moto_loja = "", {}
         self.erro_venda = ""
 
     @rx.event
@@ -246,15 +316,18 @@ class VendasState(rx.State):
         if not self.carrinho:
             self.erro_venda = "Adicione ao menos um item à venda."
             return
+        if self.tem_moto_no_carrinho and self.cliente_selecionado == SEM_CLIENTE:
+            self.erro_venda = "Para vender uma moto da loja, escolha o cliente comprador."
+            return
         itens = [
-            {"id_produto": int(i["id_produto"]), "descricao": i["descricao"],
+            {"id_produto": int(i["id_produto"]), "id_moto": int(i["id_moto"]), "descricao": i["descricao"],
              "quantidade": int(i["quantidade"]), "valor_unitario": _numero(i["valor_unitario"])}
             for i in self.carrinho
         ]
         id_cliente = 0 if self.cliente_selecionado == SEM_CLIENTE else int(self.cliente_selecionado.split(" - ")[0])
         id_moto = 0 if self.moto_selecionada == SEM_MOTO else int(self.moto_selecionada.split(" - ")[0])
         try:
-            venda_id = await servico.registrar_venda(
+            venda_id, avisos = await servico.registrar_venda(
                 self.tipo_transacao, int(self.funcionario_selecionado.split(" - ")[0]),
                 id_cliente, id_moto, itens, (await self.get_state(AuthState)).usuario_logado,
             )
@@ -264,7 +337,7 @@ class VendasState(rx.State):
             return
         total = self.total_carrinho
         self.nova_venda()
-        self.sucesso_venda = f"Venda nº {venda_id} registrada: R$ {total}."
+        self.sucesso_venda = " ".join([f"Venda nº {venda_id} registrada: R$ {total}.", *avisos])
         await self.carregar()
 
     # -------------------------------------------------------- cancelamento

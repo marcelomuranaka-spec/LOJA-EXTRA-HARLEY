@@ -18,6 +18,11 @@ table itens_transacao {
       table = "produtos"
     }
   
+    // Moto da loja vendida neste item (0/vazio = não é moto da loja).
+    int moto_id? {
+      table = "motos"
+    }
+  
     // Description of the item.
     text descricao? filters=trim
   

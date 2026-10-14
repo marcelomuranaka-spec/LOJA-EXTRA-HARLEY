@@ -72,10 +72,20 @@ Transações (Vendas), Ordens de Serviço e Itens de Ordem de Serviço.
   são **canceladas** (uma ou várias de uma vez, com motivo opcional),
   continuam no histórico como "Cancelada", saem do faturamento e devolvem
   os produtos ao estoque. O **tipo** da venda é BALCAO, PECAS ou MOTO
-  (MOTO = peças e serviços para a moto do cliente; conta em Produtos no
-  Painel). A moto da loja é vendida em Produtos > Motos, e compras ficam na
-  tela Compras; os tipos antigos COMPRA e ORDEM_SERVICO só aparecem em
-  vendas registradas antes de 09/10/2026.
+  (MOTO = venda ligada a uma moto; peças e serviços contam em Produtos no
+  Painel). Compras ficam na tela Compras; os tipos antigos COMPRA e
+  ORDEM_SERVICO só aparecem em vendas registradas antes de 09/10/2026.
+  **Moto da loja no Balcão:** a tela lista as motos disponíveis (todas,
+  menos Vendida e Indisponível) com foto, preço de venda, placa, chassi,
+  RENAVAM e demais dados. A moto entra pelo preço do cadastro (uma por
+  venda, com cliente obrigatório e junto com acessórios, se quiser). Ao
+  registrar, a moto fica **Vendida**, conta uma vez em Motos no Painel, é
+  cadastrada em **Motos dos clientes** em nome do comprador (moto sem placa
+  fica para depois do emplacamento) e o cliente recebe o e-mail de
+  parabéns. Cancelar a venda devolve a moto ao estoque. Isso exige o campo
+  `moto_id` em `itens_transacao` no Xano (`scripts\aplicar_xano.ps1`);
+  sem ele, a venda de moto é recusada sem alterar nada. A moto também pode
+  ser vendida pelo próprio cadastro em Produtos > Motos.
 - **Ordens de serviço** — abre OS vinculada a uma moto e um mecânico, permite
   lançar peças usadas (que também baixam o estoque) e serviços / mão de
   obra (descrição e valor, sem estoque), e trocar o status

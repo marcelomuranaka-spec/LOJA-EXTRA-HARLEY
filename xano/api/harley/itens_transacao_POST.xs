@@ -16,6 +16,7 @@ query itens_transacao verb=POST {
         created_at    : "now"
         transacao_id  : $input.transacao_id
         produto_id    : $input.produto_id
+        moto_id       : $input.moto_id
         descricao     : $input.descricao
         quantidade    : $input.quantidade
         valor_unitario: $input.valor_unitario

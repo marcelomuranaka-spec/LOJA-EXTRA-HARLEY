@@ -12,7 +12,7 @@ Cliente
  │     └── Ordem de serviço ── Funcionário (mecânico)
  │           └── Item da OS ── (Produto | Mão de obra)
  ├── Venda ── Funcionário (vendedor)
- │     └── Item da venda ── (Produto | Mão de obra)
+ │     └── Item da venda ── (Produto | Mão de obra | Moto da loja)
  └── Moto da loja (quando compra uma)
 
 Fornecedor
@@ -55,7 +55,10 @@ Moto que a loja tem para vender (estoque de motos).
 - **Relacionamentos:** quando vendida, fica ligada ao cliente comprador.
 - **Regras:** só a situação "Vendida" tira a moto do estoque, e exige
   cliente e chassi. O valor do estoque de motos usa o preço de compra.
-  A venda gera e-mail de parabéns ao cliente.
+  Pode ser vendida pelo próprio cadastro ou no Balcão, como item de uma
+  venda (uma por venda, pelo preço de venda); nesse caso passa a constar
+  nas motos do cliente comprador, e o cancelamento da venda a devolve ao
+  estoque. A venda gera e-mail de parabéns ao cliente.
 
 ## Produto
 
@@ -76,7 +79,7 @@ Registro de uma venda no balcão.
 - **Principais informações:** tipo, data, funcionário, cliente (opcional),
   valor total, situação.
 - **Relacionamentos:** tem um ou mais itens; cada item é um produto do
-  estoque ou um serviço avulso (mão de obra).
+  estoque, um serviço avulso (mão de obra) ou uma moto da loja.
 - **Regras:** baixa o estoque na hora; nunca é apagada, só cancelada (com
   motivo opcional), o que devolve os produtos e tira a venda do
   faturamento.

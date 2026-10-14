@@ -3,7 +3,7 @@ E-mails automáticos da loja, enviados pelo SendGrid (https://sendgrid.com).
 
 - Boas-vindas: quando um cliente com e-mail é cadastrado (tela Clientes).
 - Parabéns pela compra: quando uma moto da loja é marcada como "Vendida"
-  para um cliente com e-mail (Produtos > Motos).
+  para um cliente com e-mail (Produtos > Motos ou venda no Balcão).
 - Boas-vindas à conta: quando um administrador cria uma conta de acesso
   (tela Usuários do sistema). A senha nunca vai no e-mail.
 
